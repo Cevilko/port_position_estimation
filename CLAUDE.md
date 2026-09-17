@@ -54,22 +54,52 @@ handles this.
 If the recorder is not running, the sampler still accepts poses and reports the
 service call as failed, silently producing no data.
 
+## What the sampler randomizes
+
+Two things, independently, per attempt:
+
+- **The arm pose** -- six joints, uniform within `--joint-span` of a nominal
+  pose. The cameras are mounted on the arm, so this is what moves the viewpoint.
+- **The NIC card fixture** -- `/base_visual`, `/nic_card_mount_visual`,
+  `/nic_card_visual` and `/sc_port_visual` are bolted together in reality, so
+  they are posed as one rigid group: the same offset (`--port-pos-span`) and the
+  same yaw (`--port-yaw-span`) applied to all four, yawing about
+  `--port-pivot-prim`. **Yaw about world +z only** -- any other rotation tips
+  the fixture off the table. None of the four has physics in its subtree, so
+  this is a transform change with no collider to keep in sync, and the port
+  entrance frames (children of the card) follow automatically into `/tf`.
+  `--no-randomize-ports` restores the old fixed-fixture behaviour.
+
+Both are vetted together by the frustum test, so an accepted sample is one where
+that arm pose sees those ports.
+
 ## Things that will bite you
 
 - **`bag_recorder_node` writes to a relative, timestamped `rosbag_<stamp>` uri**,
   one per `BagRecorderNode` instance, so repeat runs no longer collide the way a
   fixed name did (rosbag2 refuses to open a bag directory that already exists).
   `./run.sh recorder` runs from `rosbags/`, so bags land in `rosbags/`; the node
-  logs the absolute path it opened. Note `./run.sh extract` still defaults to
-  `rosbags/rosbag_0` — pass the bag path explicitly.
+  logs the absolute path it opened. `./run.sh extract`, `info` and `yolo` all
+  default to the newest bag, and a bag is only "newest" once it has a
+  `metadata.yaml` — rosbag2 writes that on close, so stop the recorder before
+  extracting or you will silently get the previous bag.
 - **A trigger fired before every topic has arrived records nothing.**
   `bag_recorder_node` checks all seven subscriptions first and rejects the
   `Trigger` with `success=False` and the list of missing topics, so this is a
-  clean failure rather than a crash — but the sample is still lost. Let the sim
-  publish for a few seconds before sampling, and watch for `record: FAILED` in
-  the sampler's output.
-- **Bag timestamps are wall-clock, message headers are sim time.** The node does
-  not set `use_sim_time`. Do not join the two clocks without converting.
+  clean failure rather than a crash — but the sample is still lost. Watch the
+  recorder's log for `Nothing recorded`.
+- **Transforms are resolved at the captured image's stamp, not latched.** The
+  cameras ride the arm and the arm never fully stops (the sampler reports
+  0.1–0.2 rad/s at capture), so the newest `/tf` describes a different pose than
+  the newest image. `bag_recorder_node` keeps a tf2 buffer and looks up
+  `world -> frame` at `center_image.header.stamp`, which took projected-box
+  error from ~9 px down to ~0.7 px. This needs the recorder's clock to match the
+  sim-time stamps: `./run.sh recorder` passes `use_sim_time:=true`, and the
+  sampler adds a `ROS2PublishClock` node to the scene graph at runtime because
+  the scene itself publishes no `/clock`.
+- **The recorded `/tf` is synthesised, not the raw tree.** It holds exactly the
+  `world -> X` transforms for the tracked frames at that instant, already
+  resolved. Do not expect the full articulation chain in a recorded bag.
 - **Each camera now publishes its own `frame_id`** — `center_camera_optical`,
   `left_camera_optical`, `right_camera_optical` — set on the `ROS2CameraHelper`
   and `ROS2CameraInfoHelper` nodes and matching the camera's TF frame, so an

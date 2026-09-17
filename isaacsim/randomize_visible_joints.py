@@ -9,9 +9,16 @@ The script opens ``isaacsim/scene.usd``, finds the ``aic_unified_robot`` arm,
 ``center_camera``, and the two SFP entrance Xforms, then rejection-samples joint
 positions until both entrance frame origins intersect the camera frustum. Each
 candidate pose is given ``--settle-timeout`` seconds to settle before the FOV
-check; once a pose is accepted, the scene's ROS2 Service Client node is fired to
-call its std_srvs/Trigger service (``/record_rosbag``) and the pose is held for
-an additional ``--record-hold-seconds`` seconds before the episode resets.
+check; once a pose is accepted, the pose is held for ``--record-hold-seconds``
+and then the scene's ROS2 Service Client node is fired to call its
+std_srvs/Trigger service (``/record_rosbag``).
+
+The NIC card fixture is posed randomly too, so the ports do not sit at the same
+world position in every capture. The card, its mount, the SC port and the base
+move together as one rigid group (they are bolted together in reality), and the
+only rotation applied is yaw about world +z, which is the one that keeps the
+fixture standing on the table. Pass ``--no-randomize-ports`` to leave it at the
+pose the scene authored.
 """
 
 from __future__ import annotations
@@ -45,6 +52,22 @@ PORT_NAMES = (
     "sfp_port_0_entrance",
     "sfp_port_1_entrance",
 )
+
+#: The NIC card, its mount, the SC port and the base are one rigid fixture in
+#: reality, so they are posed as a group: the same yaw and the same offset are
+#: applied to every one of them. Splitting them would pull the card off its
+#: mount. None of them has physics in its subtree -- they are pure visuals --
+#: so moving them is a transform change and nothing else.
+PORT_GROUP_PRIMS = (
+    "/base_visual",
+    "/nic_card_mount_visual",
+    "/nic_card_visual",
+    "/sc_port_visual",
+)
+
+#: The fixture stands upright on the table, so the only orientation change that
+#: keeps it standing is yaw about world +z.
+PORT_YAW_AXIS = "z"
 
 # Headless rendering runs slower than real time, so a sim-time wait is allowed
 # this multiple of wall-clock seconds before it is treated as stalled.
@@ -83,6 +106,36 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=2.0,
         help="simulated seconds to keep an accepted, recorded pose playing after the record service call",
+    )
+    parser.add_argument(
+        "--port-pos-span",
+        type=float,
+        nargs=3,
+        default=(0.02, 0.02, 0.0),
+        metavar=("X", "Y", "Z"),
+        help="half-width in metres of the random offset applied to the NIC card fixture",
+    )
+    parser.add_argument(
+        "--port-yaw-span",
+        type=float,
+        default=0.20,
+        help="half-width in radians of the fixture's random yaw about world +z",
+    )
+    parser.add_argument(
+        "--port-group-prims",
+        nargs="+",
+        default=PORT_GROUP_PRIMS,
+        help="prims moved as one rigid fixture with the ports",
+    )
+    parser.add_argument(
+        "--port-pivot-prim",
+        default="/nic_card_visual",
+        help="prim whose position the fixture's yaw turns about",
+    )
+    parser.add_argument(
+        "--no-randomize-ports",
+        action="store_true",
+        help="keep the NIC card fixture at its authored pose",
     )
     parser.add_argument(
         "--still-speed",
@@ -193,7 +246,7 @@ def main() -> int:
     import omni.graph.core as og
     import omni.timeline
     import omni.usd
-    from isaacsim.core.prims import Articulation
+    from isaacsim.core.prims import Articulation, XFormPrim
     from isaacsim.core.utils.extensions import enable_extension
     from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
@@ -257,6 +310,20 @@ def main() -> int:
     low, high = _sampling_bounds(args, nominal, np)
     rng = np.random.default_rng(args.seed)
 
+    fixture = None
+    if not args.no_randomize_ports:
+        fixture = _RigidFixture(
+            XFormPrim, np, args.port_group_prims, args.port_pivot_prim
+        )
+        print(
+            "fixture: "
+            + ", ".join(args.port_group_prims)
+            + f"\n   yaw about {args.port_pivot_prim} at "
+            + _format_joint_vector(fixture.pivot)
+            + f", pos span {tuple(args.port_pos_span)} m, yaw span "
+            + f"+/-{args.port_yaw_span:.3f} rad"
+        )
+
     print("nominal: " + _format_joint_vector(nominal))
     print("low:     " + _format_joint_vector(low))
     print("high:    " + _format_joint_vector(high))
@@ -267,6 +334,16 @@ def main() -> int:
         for attempt in range(1, args.max_attempts + 1):
             candidate = rng.uniform(low, high)
             _apply_arm_positions(articulation, joint_indices, candidate, np)
+            if fixture is not None:
+                # Pose the fixture per attempt, not per accepted sample: the
+                # frustum test below then vets the arm pose and the port pose
+                # together, which is the combination that gets recorded.
+                span = np.asarray(args.port_pos_span, dtype=float)
+                fixture_offset = rng.uniform(-span, span)
+                fixture_yaw = float(
+                    rng.uniform(-args.port_yaw_span, args.port_yaw_span)
+                )
+                fixture.apply(fixture_yaw, fixture_offset)
             _wait_seconds(app, timeline, args.settle_timeout)
 
             visible = _camera_contains_prims(camera_prim, port_prims, Usd, UsdGeom, Gf)
@@ -277,6 +354,11 @@ def main() -> int:
                     f"accepted {accepted}/{args.samples} after {attempt} attempts: "
                     + _format_joint_vector(candidate)
                 )
+                if fixture is not None:
+                    print(
+                        f"  fixture: yaw {fixture_yaw:+.4f} rad, offset "
+                        + _format_joint_vector(fixture_offset)
+                    )
                 # Capture last, not first. The cameras ride the arm, so a
                 # trigger fired while it is still settling records an image
                 # taken from a slightly different pose than the transforms
@@ -362,6 +444,68 @@ CONTEXT_NODE_TYPE = "isaacsim.ros2.bridge.ROS2Context"
 SERVICE_CLIENT_NODE_TYPE = "isaacsim.ros2.bridge.OgnROS2ServiceClient"
 PLAYBACK_TICK_NODE_TYPE = "omni.graph.action.OnPlaybackTick"
 RECORD_GATE_NAME = "record_gate"
+
+
+def _quat_multiply_wxyz(a, b, np):
+    """Hamilton product of two scalar-first quaternions."""
+    aw, ax, ay, az = a
+    bw, bx, by, bz = b
+    return np.array(
+        [
+            aw * bw - ax * bx - ay * by - az * bz,
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+        ]
+    )
+
+
+class _RigidFixture:
+    """Poses a set of prims as one rigid body, yawing about a shared pivot.
+
+    The authored pose is captured once and every randomisation is expressed
+    relative to it, so errors cannot accumulate over a long run and the fixture
+    can always be returned to where the scene put it.
+    """
+
+    def __init__(self, XFormPrim, np, paths, pivot_path):
+        self._np = np
+        self._paths = list(paths)
+        self._view = XFormPrim(self._paths)
+        positions, orientations = self._view.get_world_poses()
+        self._base_positions = np.asarray(positions, dtype=float).copy()
+        self._base_orientations = np.asarray(orientations, dtype=float).copy()
+        if pivot_path in self._paths:
+            self._pivot = self._base_positions[self._paths.index(pivot_path)].copy()
+        else:
+            self._pivot = self._base_positions.mean(axis=0)
+
+    @property
+    def pivot(self):
+        return self._pivot
+
+    def apply(self, yaw: float, offset) -> None:
+        np = self._np
+        half = yaw / 2.0
+        yaw_quat = np.array([np.cos(half), 0.0, 0.0, np.sin(half)])
+
+        cos_yaw, sin_yaw = np.cos(yaw), np.sin(yaw)
+        relative = self._base_positions - self._pivot
+        rotated = np.column_stack(
+            [
+                cos_yaw * relative[:, 0] - sin_yaw * relative[:, 1],
+                sin_yaw * relative[:, 0] + cos_yaw * relative[:, 1],
+                relative[:, 2],
+            ]
+        )
+        positions = self._pivot + rotated + np.asarray(offset, dtype=float)
+        orientations = np.stack(
+            [
+                _quat_multiply_wxyz(yaw_quat, base, np)
+                for base in self._base_orientations
+            ]
+        )
+        self._view.set_world_poses(positions, orientations)
 
 
 def _wait_until_still(app, timeline, articulation, joint_indices, np,
