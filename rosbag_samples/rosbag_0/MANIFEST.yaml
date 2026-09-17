@@ -1,34 +1,34 @@
-source_bag: /home/etfrobotics/Documents/Luka/diplomski/rosbags/rosbag_0
-output_directory: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0
+source_bag: rosbags/rosbag_0
+output_directory: rosbag_samples/rosbag_0
 images:
   - topic: /center_camera/image
-    file: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/images/center_camera_image/sample.jpg
-    metadata: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/images/center_camera_image/sample.yaml
+    file: rosbag_samples/rosbag_0/images/center_camera_image/sample.jpg
+    metadata: rosbag_samples/rosbag_0/images/center_camera_image/sample.yaml
   - topic: /left_camera/image
-    file: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/images/left_camera_image/sample.jpg
-    metadata: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/images/left_camera_image/sample.yaml
+    file: rosbag_samples/rosbag_0/images/left_camera_image/sample.jpg
+    metadata: rosbag_samples/rosbag_0/images/left_camera_image/sample.yaml
   - topic: /right_camera/image
-    file: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/images/right_camera_image/sample.jpg
-    metadata: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/images/right_camera_image/sample.yaml
+    file: rosbag_samples/rosbag_0/images/right_camera_image/sample.jpg
+    metadata: rosbag_samples/rosbag_0/images/right_camera_image/sample.yaml
 camera_info:
   topic: /center_camera/camera_info
-  file: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/camera_info/center_camera_camera_info.yaml
+  file: rosbag_samples/rosbag_0/camera_info/center_camera_camera_info.yaml
 tf_world_transforms:
   source_topic: /tf
   bag_timestamp_ns: 1789403105725508394
   transforms:
     - requested_frame: center_camera
       recorded_child_frame_id: center_camera_optical
-      file: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/tf_world_transforms/world_to_center_camera.yaml
+      file: rosbag_samples/rosbag_0/tf_world_transforms/world_to_center_camera.yaml
     - requested_frame: left_camera
       recorded_child_frame_id: left_camera_optical
-      file: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/tf_world_transforms/world_to_left_camera.yaml
+      file: rosbag_samples/rosbag_0/tf_world_transforms/world_to_left_camera.yaml
     - requested_frame: right_camera
       recorded_child_frame_id: right_camera_optical
-      file: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/tf_world_transforms/world_to_right_camera.yaml
+      file: rosbag_samples/rosbag_0/tf_world_transforms/world_to_right_camera.yaml
     - requested_frame: sfp_port_0_entrance
       recorded_child_frame_id: sfp_port_0_entrance
-      file: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/tf_world_transforms/world_to_sfp_port_0_entrance.yaml
+      file: rosbag_samples/rosbag_0/tf_world_transforms/world_to_sfp_port_0_entrance.yaml
     - requested_frame: sfp_port_1_entrance
       recorded_child_frame_id: sfp_port_1_entrance
-      file: /home/etfrobotics/Documents/Luka/diplomski/rosbag_samples/rosbag_0/tf_world_transforms/world_to_sfp_port_1_entrance.yaml
+      file: rosbag_samples/rosbag_0/tf_world_transforms/world_to_sfp_port_1_entrance.yaml

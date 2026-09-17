@@ -38,6 +38,27 @@ TF_FRAME_ALIASES = {
 }
 
 
+#: Repo root, so emitted paths can be written relative to it.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def repo_relative(path: Path) -> str:
+    """Render ``path`` relative to the repo root when it lives inside it.
+
+    The manifest and the per-sample sidecars are committed, and a consumer may
+    be on a different machine or a different checkout, so an absolute
+    ``/home/<user>/...`` in them is wrong the moment the repo moves. Anything
+    genuinely outside the repo keeps its absolute path -- that is information,
+    not noise.
+    """
+
+    resolved = Path(path).resolve()
+    try:
+        return str(resolved.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(resolved)
+
+
 def topic_label(topic: str) -> str:
     return topic.strip("/").replace("/", "_")
 
@@ -227,7 +248,7 @@ def extract_samples(bag_path: Path, output_root: Path) -> None:
                 raise RuntimeError(f"Failed to write image: {image_path}")
             image_outputs[topic] = image_path
             image_metadata[topic] = (
-                f"source_bag: {bag_path}\n"
+                f"source_bag: {repo_relative(bag_path)}\n"
                 f"source_topic: {topic}\n"
                 f"bag_timestamp_ns: {bag_timestamp_ns}\n"
                 f"header:\n"
@@ -283,23 +304,23 @@ def extract_samples(bag_path: Path, output_root: Path) -> None:
         )
 
     manifest_lines = [
-        f"source_bag: {bag_path}",
-        f"output_directory: {bag_output.resolve()}",
+        f"source_bag: {repo_relative(bag_path)}",
+        f"output_directory: {repo_relative(bag_output)}",
         "images:",
     ]
     for topic in IMAGE_TOPICS:
         manifest_lines.extend(
             [
                 f"  - topic: {topic}",
-                f"    file: {image_outputs[topic].resolve()}",
-                f"    metadata: {image_outputs[topic].with_suffix('.yaml').resolve()}",
+                f"    file: {repo_relative(image_outputs[topic])}",
+                f"    metadata: {repo_relative(image_outputs[topic].with_suffix('.yaml'))}",
             ]
         )
     manifest_lines.extend(
         [
             "camera_info:",
             f"  topic: {camera_info_topic}",
-            f"  file: {camera_info_output.resolve()}",
+            f"  file: {repo_relative(camera_info_output)}",
             "tf_world_transforms:",
             f"  source_topic: /tf",
             f"  bag_timestamp_ns: {tf_bag_timestamp_ns}",
@@ -311,7 +332,7 @@ def extract_samples(bag_path: Path, output_root: Path) -> None:
             [
                 f"    - requested_frame: {requested_label}",
                 f"      recorded_child_frame_id: {tf_matches[requested_label]}",
-                f"      file: {tf_outputs[requested_label].resolve()}",
+                f"      file: {repo_relative(tf_outputs[requested_label])}",
             ]
         )
     write_text(bag_output / "MANIFEST.yaml", "\n".join(manifest_lines) + "\n")

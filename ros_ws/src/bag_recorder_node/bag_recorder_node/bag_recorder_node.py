@@ -18,7 +18,15 @@ class BagRecorderNode(Node):
         self.right_image_subscriber = self.create_subscription(Image, '/right_camera/image', self.right_image_callback, 1)
         self.right_camera_info_subscriber = self.create_subscription(CameraInfo, '/right_camera/camera_info', self.right_camera_info_callback, 1)
         self.tf_subscriber = self.create_subscription(TFMessage, '/tf', self.tf_callback, 10)
-        
+
+        self.center_image = None
+        self.center_camera_info = None
+        self.left_image = None
+        self.left_camera_info = None
+        self.right_image = None
+        self.right_camera_info = None
+        self.tf_message = None
+
         self.writer = rosbag2_py.SequentialWriter()
         storage_options = rosbag2_py.StorageOptions(
             uri='maj_beg',
@@ -97,42 +105,26 @@ class BagRecorderNode(Node):
         self.tf_message = msg
 
     def record_callback(self, request, response):
+        messages = {
+            '/center_camera/image': self.center_image,
+            '/center_camera/camera_info': self.center_camera_info,
+            '/left_camera/image': self.left_image,
+            '/left_camera/camera_info': self.left_camera_info,
+            '/right_camera/image': self.right_image,
+            '/right_camera/camera_info': self.right_camera_info,
+            '/tf': self.tf_message,
+        }
+
+        missing = [topic for topic, message in messages.items() if message is None]
+        if missing:
+            response.success = False
+            response.message = 'Nothing recorded; missing messages on: ' + ', '.join(missing)
+            self.get_logger().warn(response.message)
+            return response
+
         timestamp = self.get_clock().now().nanoseconds
-
-        self.writer.write(
-            '/center_camera/image',
-            serialize_message(self.center_image),
-            timestamp)
-
-        self.writer.write(
-            '/center_camera/camera_info',
-            serialize_message(self.center_camera_info),
-            timestamp)
-
-        self.writer.write(
-            '/left_camera/image',
-            serialize_message(self.left_image),
-            timestamp)
-
-        self.writer.write(
-            '/left_camera/camera_info',
-            serialize_message(self.left_camera_info),
-            timestamp)
-
-        self.writer.write(
-            '/right_camera/image',
-            serialize_message(self.right_image),
-            timestamp)
-
-        self.writer.write(
-            '/right_camera/camera_info',
-            serialize_message(self.right_camera_info),
-            timestamp)
-
-        self.writer.write(
-            '/tf',
-            serialize_message(self.tf_message),
-            timestamp)
+        for topic, message in messages.items():
+            self.writer.write(topic, serialize_message(message), timestamp)
 
         response.success = True
         response.message = 'Recorded data to rosbag.'

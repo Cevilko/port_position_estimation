@@ -1,4 +1,4 @@
-source_bag: /home/etfrobotics/Documents/Luka/diplomski/rosbags/rosbag_0
+source_bag: rosbags/rosbag_0
 source_topic: /right_camera/image
 bag_timestamp_ns: 1789403105764760004
 header:
