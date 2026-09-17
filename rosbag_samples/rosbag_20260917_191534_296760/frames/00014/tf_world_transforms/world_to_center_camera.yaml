@@ -1,0 +1,16 @@
+header:
+  stamp:
+    sec: 36
+    nanosec: 433335233
+  frame_id: world
+child_frame_id: center_camera_optical
+transform:
+  translation:
+    x: 0.19889970123767853
+    y: 0.0010321271838620305
+    z: 1.8518273830413818
+  rotation:
+    x: 0.7202892145997812
+    y: -0.6794751104186336
+    z: -0.12607645266016135
+    w: -0.06001457937406579
