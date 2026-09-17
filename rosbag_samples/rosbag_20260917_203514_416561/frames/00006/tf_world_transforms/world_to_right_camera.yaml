@@ -1,0 +1,16 @@
+header:
+  stamp:
+    sec: 29
+    nanosec: 183334855
+  frame_id: world
+child_frame_id: right_camera_optical
+transform:
+  translation:
+    x: 0.1154838502407074
+    y: -0.09696593880653381
+    z: 1.8378793001174927
+  rotation:
+    x: -0.2854484000012387
+    y: 0.925929002891221
+    z: 0.22332389483337714
+    w: 0.10630677559804325

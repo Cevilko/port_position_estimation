@@ -1,0 +1,13 @@
+source_bag: rosbags/rosbag_20260917_203514_416561
+source_topic: /center_camera/image
+bag_timestamp_ns: 41716668842
+header:
+  stamp:
+    sec: 41
+    nanosec: 683335507
+  frame_id: center_camera_optical
+height: 1024
+width: 1152
+encoding: rgb8
+is_bigendian: 0
+step: 3456

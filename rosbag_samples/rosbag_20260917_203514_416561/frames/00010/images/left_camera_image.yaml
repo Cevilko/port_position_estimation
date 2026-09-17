@@ -1,0 +1,13 @@
+source_bag: rosbags/rosbag_20260917_203514_416561
+source_topic: /left_camera/image
+bag_timestamp_ns: 45883335726
+header:
+  stamp:
+    sec: 45
+    nanosec: 850002391
+  frame_id: left_camera_optical
+height: 1024
+width: 1152
+encoding: rgb8
+is_bigendian: 0
+step: 3456

@@ -85,6 +85,18 @@ def parse_args() -> argparse.Namespace:
         help="simulated seconds to keep an accepted, recorded pose playing after the record service call",
     )
     parser.add_argument(
+        "--still-speed",
+        type=float,
+        default=1e-3,
+        help="max joint speed in rad/s that still counts as a settled pose",
+    )
+    parser.add_argument(
+        "--still-timeout",
+        type=float,
+        default=2.0,
+        help="simulated seconds to wait for the arm to fall below --still-speed",
+    )
+    parser.add_argument(
         "--record-client-prim",
         default="ros2_service_client",
         help="prim path or name of the scene's ROS2 Service Client node fired on an accepted pose",
@@ -222,6 +234,9 @@ def main() -> int:
     _pump(app, 20)
 
     if not args.skip_record:
+        graph_path = client_prim.GetPath().pathString.rsplit("/", 1)[0]
+        clock_path = _ensure_clock_publisher(stage, og, graph_path)
+        print(f"clock:  {clock_path or 'NOT PUBLISHED (recorder will use wall time)'}")
         record_gate = _setup_record_gate(stage, og, client_prim.GetPath().pathString)
         # The client node's first compute only initialises it, so spend that
         # no-op pulse here instead of losing the first accepted pose's recording.
@@ -262,10 +277,22 @@ def main() -> int:
                     f"accepted {accepted}/{args.samples} after {attempt} attempts: "
                     + _format_joint_vector(candidate)
                 )
+                # Capture last, not first. The cameras ride the arm, so a
+                # trigger fired while it is still settling records an image
+                # taken from a slightly different pose than the transforms
+                # published alongside it, which shifts every projected box.
+                _wait_seconds(app, timeline, args.record_hold_seconds)
+                speed = _wait_until_still(
+                    app, timeline, articulation, joint_indices, np,
+                    args.still_speed, args.still_timeout,
+                )
+                if speed > args.still_speed:
+                    print(
+                        f"warning: arm still moving at {speed:.4f} rad/s when captured"
+                    )
                 if record_gate is not None:
                     _pulse_record_gate(app, record_gate)
                     print("record:  triggered")
-                _wait_seconds(app, timeline, args.record_hold_seconds)
                 break
         else:
             raise RuntimeError(
@@ -329,9 +356,34 @@ def _wait_seconds(app, timeline, seconds: float) -> None:
             return
 
 
+CLOCK_NODE_TYPE = "isaacsim.ros2.bridge.ROS2PublishClock"
+SIM_TIME_NODE_TYPE = "isaacsim.core.nodes.IsaacReadSimulationTime"
+CONTEXT_NODE_TYPE = "isaacsim.ros2.bridge.ROS2Context"
 SERVICE_CLIENT_NODE_TYPE = "isaacsim.ros2.bridge.OgnROS2ServiceClient"
 PLAYBACK_TICK_NODE_TYPE = "omni.graph.action.OnPlaybackTick"
 RECORD_GATE_NAME = "record_gate"
+
+
+def _wait_until_still(app, timeline, articulation, joint_indices, np,
+                      threshold: float, timeout: float) -> float:
+    """Pump frames until the arm's fastest joint drops below ``threshold``.
+
+    Returns the last speed seen, so the caller can report a pose that never
+    settled rather than silently recording a smeared one.
+    """
+    start = timeline.get_current_time()
+    speed = float("inf")
+    while True:
+        velocities = np.asarray(articulation.get_joint_velocities())
+        if velocities.ndim == 2:
+            velocities = velocities[0]
+        speed = float(np.max(np.abs(velocities[joint_indices])))
+        if speed <= threshold:
+            return speed
+        elapsed = timeline.get_current_time() - start
+        if elapsed < 0 or elapsed >= timeout:
+            return speed
+        app.update()
 
 
 def _resolve_service_client_prim(stage, query: str):
@@ -398,6 +450,48 @@ def _setup_record_gate(stage, og, client_path: str):
         },
     )
     return og.Controller.attribute("inputs:condition", og.Controller.node(gate_path))
+
+
+def _ensure_clock_publisher(stage, og, graph_path: str) -> str | None:
+    """Publish /clock from the scene's simulation time, adding the node if absent.
+
+    The recorder resolves transforms at an image's stamp, which needs its clock
+    to agree with the sim time those stamps are in. Without /clock the recorder
+    runs on wall-clock time and every lookup falls outside the TF buffer.
+    """
+    existing = _find_node_of_type(stage, graph_path, CLOCK_NODE_TYPE)
+    if existing is not None:
+        return existing
+
+    tick_path = _find_node_of_type(stage, graph_path, PLAYBACK_TICK_NODE_TYPE)
+    sim_time_path = _find_node_of_type(stage, graph_path, SIM_TIME_NODE_TYPE)
+    context_path = _find_node_of_type(stage, graph_path, CONTEXT_NODE_TYPE)
+    if tick_path is None or sim_time_path is None:
+        return None
+
+    clock_path = f"{graph_path}/ros2_publish_clock"
+    og.Controller.edit(
+        graph_path,
+        {
+            og.Controller.Keys.CREATE_NODES: [("ros2_publish_clock", CLOCK_NODE_TYPE)],
+            og.Controller.Keys.SET_VALUES: [
+                (f"{clock_path}.inputs:topicName", "clock")
+            ],
+            og.Controller.Keys.CONNECT: [
+                (f"{tick_path}.outputs:tick", f"{clock_path}.inputs:execIn"),
+                (
+                    f"{sim_time_path}.outputs:simulationTime",
+                    f"{clock_path}.inputs:timeStamp",
+                ),
+            ]
+            + (
+                [(f"{context_path}.outputs:context", f"{clock_path}.inputs:context")]
+                if context_path is not None
+                else []
+            ),
+        },
+    )
+    return clock_path
 
 
 def _find_node_of_type(stage, graph_path: str, node_type: str):

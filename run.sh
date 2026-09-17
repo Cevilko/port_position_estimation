@@ -67,6 +67,8 @@ Pipeline, in the order you run it:
 
 Inspection and verification -- none of these need Isaac Sim:
 
+  yolo [bag]         export an extracted bag as a YOLO detection dataset
+                     (default: newest extraction in rosbag_samples/)
   bbox <frame>       project the SFP port entrances into an extracted frame as
                      2D boxes; --annotate <out.jpg> draws them on the image
   contract           regenerate docs/scene_contract.yaml from isaacsim/scene.usd
@@ -104,7 +106,10 @@ recorder)
     mkdir -p "$REPO/rosbags"
     cd "$REPO/rosbags"
     echo "recorder: writing to rosbags/rosbag_<timestamp>; waiting for /record_rosbag"
-    exec ros2 run bag_recorder_node bag_recorder_node
+    # use_sim_time, because the recorder resolves transforms at an image's
+    # stamp and those stamps are simulation time. The sampler adds a /clock
+    # publisher to the scene graph so this clock has something to follow.
+    exec ros2 run bag_recorder_node bag_recorder_node --ros-args -p use_sim_time:=true
     ;;
 
 sample)
@@ -122,6 +127,11 @@ sample)
 extract)
     with_ros
     exec "$SYSTEM_PYTHON" "$REPO/scripts/extract_rosbag_samples.py" "$@"
+    ;;
+
+yolo)
+    with_ros
+    exec "$SYSTEM_PYTHON" "$REPO/scripts/export_yolo_dataset.py" "$@"
     ;;
 
 bbox)

@@ -8,7 +8,19 @@ from sensor_msgs.msg import Image, CameraInfo
 from tf2_msgs.msg import TFMessage
 from std_srvs.srv import Trigger
 
+import tf2_ros
 import rosbag2_py
+
+#: Frames resolved against ``world`` at the captured image's stamp. These are
+#: what the extractor and the bounding-box projection consume.
+TRACKED_FRAMES = (
+    'center_camera_optical',
+    'left_camera_optical',
+    'right_camera_optical',
+    'sfp_port_0_entrance',
+    'sfp_port_1_entrance',
+)
+WORLD_FRAME = 'world' 
 
 class BagRecorderNode(Node):
     def __init__(self):
@@ -20,7 +32,12 @@ class BagRecorderNode(Node):
         self.left_camera_info_subscriber = self.create_subscription(CameraInfo, '/left_camera/camera_info', self.left_camera_info_callback, 1)
         self.right_image_subscriber = self.create_subscription(Image, '/right_camera/image', self.right_image_callback, 1)
         self.right_camera_info_subscriber = self.create_subscription(CameraInfo, '/right_camera/camera_info', self.right_camera_info_callback, 1)
-        self.tf_subscriber = self.create_subscription(TFMessage, '/tf', self.tf_callback, 10)
+        # /tf is consumed through a tf2 buffer rather than latched raw: the
+        # cameras ride the arm, so the newest tree describes a slightly
+        # different pose than the newest image. The buffer lets each recording
+        # resolve transforms at its own image's stamp instead.
+        self.tf_buffer = tf2_ros.Buffer(cache_time=rclpy.duration.Duration(seconds=30.0))
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self.center_image = None
         self.center_camera_info = None
@@ -28,7 +45,6 @@ class BagRecorderNode(Node):
         self.left_camera_info = None
         self.right_image = None
         self.right_camera_info = None
-        self.tf_message = None
 
         # rosbag2 refuses to reopen an existing bag directory, so each instance
         # gets its own timestamped uri instead of a fixed one.
@@ -109,26 +125,53 @@ class BagRecorderNode(Node):
     def right_camera_info_callback(self, msg):
         self.right_camera_info = msg
 
-    def tf_callback(self, msg):
-        self.tf_message = msg
+    def lookup_tf_at(self, stamp):
+        """Resolve every tracked frame against world at ``stamp``.
+
+        Returns a TFMessage, or None with a reason if any frame is unavailable
+        at that time -- a partial tree would silently mislabel a sample.
+        """
+        transforms = []
+        for frame in TRACKED_FRAMES:
+            try:
+                transforms.append(
+                    self.tf_buffer.lookup_transform(WORLD_FRAME, frame, stamp)
+                )
+            except tf2_ros.TransformException as error:
+                return None, f'{frame}: {error}'
+        message = TFMessage()
+        message.transforms = transforms
+        return message, None
 
     def record_callback(self, request, response):
-        messages = {
+        images = {
             '/center_camera/image': self.center_image,
             '/center_camera/camera_info': self.center_camera_info,
             '/left_camera/image': self.left_image,
             '/left_camera/camera_info': self.left_camera_info,
             '/right_camera/image': self.right_image,
             '/right_camera/camera_info': self.right_camera_info,
-            '/tf': self.tf_message,
         }
 
-        missing = [topic for topic, message in messages.items() if message is None]
+        missing = [topic for topic, message in images.items() if message is None]
         if missing:
             response.success = False
             response.message = 'Nothing recorded; missing messages on: ' + ', '.join(missing)
             self.get_logger().warn(response.message)
             return response
+
+        # The captured image defines the instant; the transforms are resolved
+        # to match it rather than being whatever /tf happened to publish last.
+        capture_stamp = self.center_image.header.stamp
+        tf_message, reason = self.lookup_tf_at(capture_stamp)
+        if tf_message is None:
+            response.success = False
+            response.message = f'Nothing recorded; no transform at image stamp ({reason})'
+            self.get_logger().warn(response.message)
+            return response
+
+        messages = dict(images)
+        messages['/tf'] = tf_message
 
         timestamp = self.get_clock().now().nanoseconds
         for topic, message in messages.items():
