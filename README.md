@@ -30,7 +30,8 @@ Two terminals.
 Then turn a recorded bag into inspectable samples:
 
 ```bash
-./run.sh extract rosbags/rosbag_0   # -> rosbag_samples/rosbag_0/
+./run.sh extract                    # newest bag in rosbags/ -> rosbag_samples/
+./run.sh extract rosbags/rosbag_0   # or name one explicitly
 ```
 
 `./run.sh` with no arguments lists every step. **Read [CLAUDE.md](CLAUDE.md)
@@ -106,12 +107,9 @@ cheap check — keep new extractor logic in pure functions so it stays that way.
 These are real and currently unfixed; CLAUDE.md has the detail.
 
 - Bag timestamps are wall-clock while message headers are sim time.
-- All three cameras publish `frame_id: sim_camera`, so an image does not say
-  which camera produced it.
-- `bag_recorder_node` writes to a hardcoded relative path, and a trigger fired
-  before all seven topics have arrived is rejected cleanly but still loses that
-  sample.
+- A trigger fired before all seven topics have arrived is rejected cleanly but
+  still loses that sample.
 - The scene references assets by absolute path into `~/IsaacLab`, three of
   which are already dead. It is not portable to another machine as-is.
-- `extract_rosbag_samples.py` extracts one frame per camera per bag. Turning
-  ~1950 frames into a full dataset is still to do.
+- Bags hold one frame per accepted pose, not a continuous stream, so frame rate
+  is whatever the sampler triggered at.

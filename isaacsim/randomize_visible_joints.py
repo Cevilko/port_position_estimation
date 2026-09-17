@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import math
 import sys
+import time
 from pathlib import Path
 
 
@@ -44,6 +45,10 @@ PORT_NAMES = (
     "sfp_port_0_entrance",
     "sfp_port_1_entrance",
 )
+
+# Headless rendering runs slower than real time, so a sim-time wait is allowed
+# this multiple of wall-clock seconds before it is treated as stalled.
+WAIT_WALL_CLOCK_LIMIT = 20.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -291,12 +296,37 @@ def _pump(app, frames: int) -> None:
 
 
 def _wait_seconds(app, timeline, seconds: float) -> None:
+    """Play for ``seconds`` of simulation time.
+
+    Elapsed time is accumulated per frame rather than compared against a start
+    value: playback restarts from the stage's start time when it reaches the
+    end, which makes a single start/now comparison run backwards and never
+    finish. A wall-clock deadline bounds the wait if the timeline stops
+    advancing altogether.
+    """
     if seconds <= 0:
         app.update()
         return
-    start = timeline.get_current_time()
-    while timeline.get_current_time() - start < seconds:
+
+    elapsed = 0.0
+    previous = timeline.get_current_time()
+    deadline = time.monotonic() + WAIT_WALL_CLOCK_LIMIT * seconds + 10.0
+    while elapsed < seconds:
         app.update()
+        if not timeline.is_playing():
+            timeline.play()
+        current = timeline.get_current_time()
+        delta = current - previous
+        previous = current
+        # A negative delta is the timeline wrapping back to its start.
+        if delta > 0:
+            elapsed += delta
+        if time.monotonic() > deadline:
+            print(
+                f"warning: waited {elapsed:.2f}s of sim time for a {seconds:.2f}s "
+                "wait before the wall-clock limit; continuing"
+            )
+            return
 
 
 SERVICE_CLIENT_NODE_TYPE = "isaacsim.ros2.bridge.OgnROS2ServiceClient"

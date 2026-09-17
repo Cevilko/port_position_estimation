@@ -95,19 +95,13 @@ build)
 recorder)
     with_ros
     require_file "$REPO/ros_ws/install/setup.bash" "workspace not built -- run ./run.sh build first"
-    # bag_recorder_node hardcodes its output to the relative path 'maj_beg',
-    # and rosbag2 refuses to open a bag directory that already exists. Running
-    # from rosbags/ keeps that output with the other bags instead of wherever
-    # the shell happened to be, and the check below turns "silent crash on
-    # startup" into a sentence that says what to do.
+    # bag_recorder_node writes to a relative, timestamped 'rosbag_<stamp>' uri,
+    # so running from rosbags/ keeps that output with the other bags instead of
+    # wherever the shell happened to be. The node logs the absolute path it
+    # opened on startup.
     mkdir -p "$REPO/rosbags"
     cd "$REPO/rosbags"
-    if [[ -e maj_beg ]]; then
-        die "rosbags/maj_beg already exists; rosbag2 will not reopen it.
-       Rename the previous run first, e.g.
-           mv rosbags/maj_beg rosbags/rosbag_\$(date +%Y%m%d_%H%M%S)"
-    fi
-    echo "recorder: writing to rosbags/maj_beg; waiting for /record_rosbag"
+    echo "recorder: writing to rosbags/rosbag_<timestamp>; waiting for /record_rosbag"
     exec ros2 run bag_recorder_node bag_recorder_node
     ;;
 
@@ -139,7 +133,16 @@ test)
 
 info)
     with_ros
-    exec ros2 bag info "${1:-$REPO/rosbags/rosbag_0}"
+    bag="${1:-}"
+    if [[ -z "$bag" ]]; then
+        # Bags are named by timestamp, so there is no fixed path to default to.
+        bag=$(ls -1dt "$REPO"/rosbags/*/ 2>/dev/null | while read -r dir; do
+                  [[ -f "$dir/metadata.yaml" ]] && { echo "${dir%/}"; break; }
+              done)
+        [[ -n "$bag" ]] || die "no bag found in rosbags/; pass one explicitly"
+        echo "using newest bag: $bag"
+    fi
+    exec ros2 bag info "$bag"
     ;;
 
 topics)

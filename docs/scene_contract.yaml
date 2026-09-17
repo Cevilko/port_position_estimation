@@ -2,7 +2,7 @@
 # Regenerate and commit after any change to isaacsim/scene.usd.
 
 source_stage: "isaacsim/scene.usd"
-total_prims: 421
+total_prims: 422
 
 # ----------------------------------------------------------------------
 cameras:
@@ -79,25 +79,33 @@ ros2_graph:
         type: "isaacsim.ros2.bridge.ROS2CameraHelper"
         topicName: "image"
         nodeNamespace: "center_camera"
+        frameId: "center_camera_optical"
       - name: "ros2_camera_helper_01"
         type: "isaacsim.ros2.bridge.ROS2CameraHelper"
         topicName: "image"
         nodeNamespace: "left_camera"
+        frameId: "left_camera_optical"
       - name: "ros2_camera_helper_02"
         type: "isaacsim.ros2.bridge.ROS2CameraHelper"
         topicName: "image"
         nodeNamespace: "right_camera"
+        frameId: "right_camera_optical"
       - name: "ros2_camera_info_helper"
         type: "isaacsim.ros2.bridge.ROS2CameraInfoHelper"
         nodeNamespace: "center_camera"
+        frameId: "center_camera_optical"
       - name: "ros2_camera_info_helper_01"
         type: "isaacsim.ros2.bridge.ROS2CameraInfoHelper"
         nodeNamespace: "left_camera"
+        frameId: "left_camera_optical"
       - name: "ros2_camera_info_helper_02"
         type: "isaacsim.ros2.bridge.ROS2CameraInfoHelper"
         nodeNamespace: "right_camera"
+        frameId: "right_camera_optical"
       - name: "ros2_context"
         type: "isaacsim.ros2.bridge.ROS2Context"
+      - name: "ros2_publish_bbox2d"
+        type: "isaacsim.ros2.bridge.ROS2PublishBbox2D"
       - name: "ros2_publish_transform_tree"
         type: "isaacsim.ros2.bridge.ROS2PublishTransformTree"
         targetPrims:

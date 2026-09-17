@@ -1,3 +1,6 @@
+import os
+from datetime import datetime
+
 import rclpy
 from rclpy.node import Node
 from rclpy.serialization import serialize_message
@@ -27,12 +30,17 @@ class BagRecorderNode(Node):
         self.right_camera_info = None
         self.tf_message = None
 
+        # rosbag2 refuses to reopen an existing bag directory, so each instance
+        # gets its own timestamped uri instead of a fixed one.
+        self.bag_uri = 'rosbag_' + datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+
         self.writer = rosbag2_py.SequentialWriter()
         storage_options = rosbag2_py.StorageOptions(
-            uri='maj_beg',
+            uri=self.bag_uri,
             storage_id='mcap')
         converter_options = rosbag2_py.ConverterOptions('', '')
         self.writer.open(storage_options, converter_options)
+        self.get_logger().info('Recording to ' + os.path.abspath(self.bag_uri))
 
         topic_info = rosbag2_py.TopicMetadata(
             id=0,

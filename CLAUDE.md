@@ -56,10 +56,12 @@ service call as failed, silently producing no data.
 
 ## Things that will bite you
 
-- **`bag_recorder_node` writes to the hardcoded relative path `maj_beg`**, and
-  rosbag2 refuses to open a bag directory that already exists. `./run.sh
-  recorder` runs from `rosbags/` and refuses up front with instructions rather
-  than letting it crash on startup. Rename the previous run before re-recording.
+- **`bag_recorder_node` writes to a relative, timestamped `rosbag_<stamp>` uri**,
+  one per `BagRecorderNode` instance, so repeat runs no longer collide the way a
+  fixed name did (rosbag2 refuses to open a bag directory that already exists).
+  `./run.sh recorder` runs from `rosbags/`, so bags land in `rosbags/`; the node
+  logs the absolute path it opened. Note `./run.sh extract` still defaults to
+  `rosbags/rosbag_0` — pass the bag path explicitly.
 - **A trigger fired before every topic has arrived records nothing.**
   `bag_recorder_node` checks all seven subscriptions first and rejects the
   `Trigger` with `success=False` and the list of missing topics, so this is a
@@ -68,10 +70,14 @@ service call as failed, silently producing no data.
   the sampler's output.
 - **Bag timestamps are wall-clock, message headers are sim time.** The node does
   not set `use_sim_time`. Do not join the two clocks without converting.
-- **All three cameras publish `frame_id: sim_camera`.** The image message does
-  not say which camera it came from. `extract_rosbag_samples.py` recovers this
-  through its `TF_FRAME_ALIASES` table; anything else consuming these bags must
-  do the same or it will associate all three images with one frame.
+- **Each camera now publishes its own `frame_id`** — `center_camera_optical`,
+  `left_camera_optical`, `right_camera_optical` — set on the `ROS2CameraHelper`
+  and `ROS2CameraInfoHelper` nodes and matching the camera's TF frame, so an
+  image says which camera produced it. **Bags recorded before this change (e.g.
+  `rosbags/rosbag_0`, and anything under `rosbag_samples/rosbag_0/`) still carry
+  `frame_id: sim_camera` for all three**, which is ambiguous; identify cameras
+  in those by topic, not `frame_id`. `extract_rosbag_samples.py` is unaffected
+  either way — it resolves cameras through `TF_FRAME_ALIASES` against `/tf`.
 - **Never edit `ros_ws/install/`.** Rebuild with `./run.sh build`.
 - **The USD scene references assets by absolute path into `~/IsaacLab`,** and
   three of those references are already dead — see `unresolved_references` in

@@ -23,6 +23,7 @@ Jazzy; the conda python that comes first on PATH has none of them.
 from __future__ import annotations
 
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -290,3 +291,112 @@ def test_repo_relative_never_emits_a_home_path_for_repo_content():
 def test_topic_label_flattens_a_topic_into_a_filename():
     assert extract.topic_label("/center_camera/image") == "center_camera_image"
     assert extract.topic_label("/tf") == "tf"
+
+
+def _make_bag(root: Path, name: str, mtime: float) -> Path:
+    bag = root / name
+    bag.mkdir(parents=True)
+    metadata = bag / "metadata.yaml"
+    metadata.write_text("version: 5\n")
+    os.utime(metadata, (mtime, mtime))
+    return bag
+
+
+def test_latest_bag_picks_the_most_recently_written_bag(tmp_path):
+    _make_bag(tmp_path, "rosbag_20260101_000000_000000", mtime=1000)
+    newest = _make_bag(tmp_path, "rosbag_20260917_183618_346247", mtime=3000)
+    _make_bag(tmp_path, "rosbag_20260501_120000_000000", mtime=2000)
+
+    assert extract.latest_bag(tmp_path) == newest
+
+
+def test_latest_bag_ignores_directories_without_metadata(tmp_path):
+    real = _make_bag(tmp_path, "rosbag_real", mtime=1000)
+    (tmp_path / "not_a_bag").mkdir()
+
+    assert extract.latest_bag(tmp_path) == real
+
+
+def test_latest_bag_returns_none_when_there_is_nothing_to_find(tmp_path):
+    assert extract.latest_bag(tmp_path) is None
+    assert extract.latest_bag(tmp_path / "missing") is None
+
+
+def test_group_frames_groups_topics_sharing_a_bag_timestamp():
+    records = [
+        ("/center_camera/image", b"c1", 100),
+        ("/left_camera/image", b"l1", 100),
+        ("/right_camera/image", b"r1", 100),
+        ("/tf", b"t1", 100),
+        ("/center_camera/image", b"c2", 200),
+        ("/left_camera/image", b"l2", 200),
+        ("/right_camera/image", b"r2", 200),
+        ("/tf", b"t2", 200),
+    ]
+
+    groups = list(extract.group_frames(records))
+
+    assert [timestamp for timestamp, _ in groups] == [100, 200]
+    assert groups[0][1]["/center_camera/image"] == b"c1"
+    assert groups[1][1]["/tf"] == b"t2"
+
+
+def test_group_frames_never_mixes_two_timestamps_into_one_frame():
+    """Interleaved writes must not borrow a topic from a neighbouring frame."""
+
+    records = [
+        ("/center_camera/image", b"c1", 100),
+        ("/center_camera/image", b"c2", 200),
+        ("/left_camera/image", b"l2", 200),
+        ("/right_camera/image", b"r2", 200),
+        ("/tf", b"t2", 200),
+    ]
+
+    groups = list(extract.group_frames(records))
+
+    assert len(groups) == 1
+    timestamp, group = groups[0]
+    assert timestamp == 200
+    assert group["/center_camera/image"] == b"c2"
+
+
+def test_group_frames_drops_incomplete_groups():
+    records = [
+        ("/center_camera/image", b"c1", 100),
+        ("/left_camera/image", b"l1", 100),
+        ("/tf", b"t1", 100),
+    ]
+
+    assert list(extract.group_frames(records)) == []
+
+
+def test_group_frames_ignores_topics_outside_a_frame():
+    records = [
+        ("/center_camera/camera_info", b"info", 100),
+        ("/center_camera/image", b"c1", 100),
+        ("/left_camera/image", b"l1", 100),
+        ("/right_camera/image", b"r1", 100),
+        ("/tf", b"t1", 100),
+    ]
+
+    _, group = next(iter(extract.group_frames(records)))
+
+    assert "/center_camera/camera_info" not in group
+    assert sorted(group) == sorted(extract.FRAME_TOPICS)
+
+
+def test_group_frames_releases_each_group_as_it_completes():
+    """Memory must not grow with bag length: ~1950 frames cannot be buffered."""
+
+    def records():
+        for stamp in range(0, 500, 100):
+            for topic in extract.FRAME_TOPICS:
+                yield topic, b"x", stamp
+
+    assert len(list(extract.group_frames(records()))) == 5
+
+
+def test_frame_dir_name_sorts_lexicographically():
+    names = [extract.frame_dir_name(i) for i in (0, 9, 10, 1000)]
+    assert names == ["00000", "00009", "00010", "01000"]
+    assert names == sorted(names)
