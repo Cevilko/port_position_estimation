@@ -67,6 +67,8 @@ Pipeline, in the order you run it:
 
 Inspection and verification -- none of these need Isaac Sim:
 
+  bbox <frame>       project the SFP port entrances into an extracted frame as
+                     2D boxes; --annotate <out.jpg> draws them on the image
   contract           regenerate docs/scene_contract.yaml from isaacsim/scene.usd
   test               run the pytest suite
   info [bag]         ros2 bag info on a recorded bag
@@ -120,6 +122,11 @@ sample)
 extract)
     with_ros
     exec "$SYSTEM_PYTHON" "$REPO/scripts/extract_rosbag_samples.py" "$@"
+    ;;
+
+bbox)
+    with_ros
+    exec "$SYSTEM_PYTHON" "$REPO/scripts/project_port_bboxes.py" "$@"
     ;;
 
 contract)

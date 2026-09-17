@@ -2,7 +2,7 @@
 # Regenerate and commit after any change to isaacsim/scene.usd.
 
 source_stage: "isaacsim/scene.usd"
-total_prims: 422
+total_prims: 421
 
 # ----------------------------------------------------------------------
 cameras:
@@ -104,8 +104,6 @@ ros2_graph:
         frameId: "right_camera_optical"
       - name: "ros2_context"
         type: "isaacsim.ros2.bridge.ROS2Context"
-      - name: "ros2_publish_bbox2d"
-        type: "isaacsim.ros2.bridge.ROS2PublishBbox2D"
       - name: "ros2_publish_transform_tree"
         type: "isaacsim.ros2.bridge.ROS2PublishTransformTree"
         targetPrims:
