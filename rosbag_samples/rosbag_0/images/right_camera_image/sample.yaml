@@ -1,0 +1,13 @@
+source_bag: /home/etfrobotics/Documents/Luka/diplomski/rosbags/rosbag_0
+source_topic: /right_camera/image
+bag_timestamp_ns: 1789403105764760004
+header:
+  stamp:
+    sec: 387
+    nanosec: 633353549
+  frame_id: sim_camera
+height: 1024
+width: 1152
+encoding: rgb8
+is_bigendian: 0
+step: 3456

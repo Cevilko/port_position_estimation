@@ -1,0 +1,33 @@
+# --- Large binary simulation + dataset artifacts -------------------------
+# Deliberately untracked. These are reproducible outputs or multi-hundred-MB
+# binaries; tracking them in plain git would make the repo unusable.
+#
+# The USD scene is the exception that hurts: isaacsim/scene.usd IS a primary
+# artifact, but it is 9 MB of binary USDC that no diff can show. Its tracked,
+# human- and agent-readable proxy is docs/scene_contract.yaml -- regenerate
+# that with scripts/dump_scene_contract.py after ANY change to the scene.
+# If you later want the binary itself versioned, `git lfs track "*.usd"`
+# (git-lfs is installed on this machine).
+*.usd
+*.usda
+*.mcap
+
+# Recorded bags. Raw data, backed up separately -- not repo content.
+rosbags/
+
+# --- ROS 2 colcon workspace ----------------------------------------------
+ros_ws/build/
+ros_ws/install/
+ros_ws/log/
+
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# --- Editors / OS ---------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+.DS_Store
