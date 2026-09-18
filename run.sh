@@ -73,10 +73,14 @@ Inspection and verification -- none of these need Isaac Sim:
 
   yolo [bag]         export an extracted bag as a YOLO detection dataset
                      (default: newest extraction in rosbag_samples/)
-  train [args]       train a detector on yolo_dataset/. imgsz defaults to 1152,
-                     the native width: the ports are ~19 px, and the usual 640
-                     would shrink them to ~11. Args pass through to the yolo
-                     CLI (model=, epochs=, batch=, ...).
+  train [args]       train a detector on yolo_dataset/. Defaults are tuned for
+                     ~17 px objects: imgsz=1152 (native width; the usual 640
+                     would shrink them to ~9), batch=-1 (auto-fit, since a P2
+                     head at 1152 is memory-hungry), and reduced scale/mosaic
+                     augmentation. NOTE: the default model= is an architecture
+                     file, so training starts from RANDOM WEIGHTS -- pass
+                     pretrained=yolo26s.pt to start from COCO instead.
+                     Args pass through to the yolo CLI (model=, epochs=, ...).
   bbox <frame>       project the SFP port entrances into an extracted frame as
                      2D boxes; --annotate <out.jpg> draws them on the image
   contract           regenerate docs/scene_contract.yaml from isaacsim/scene.usd
@@ -157,6 +161,17 @@ train)
     [[ "$*" == *imgsz=* ]]  || defaults+=("imgsz=${YOLO_IMGSZ:-1152}")
     [[ "$*" == *data=* ]]   || defaults+=("data=$REPO/yolo_dataset/data.yaml")
     [[ "$*" == *project=* ]] || defaults+=("project=$REPO/runs")
+    # A P2 head at imgsz=1152 carries a 288x288 stride-4 feature map, so the
+    # usual batch=16 (tuned at 640, no P2) is not the same ask. -1 fits the
+    # batch to the card instead of guessing.
+    [[ "$*" == *batch=* ]]  || defaults+=("batch=${YOLO_BATCH:--1}")
+    # The ports are ~17 px at native resolution. Ultralytics defaults to
+    # mosaic=1.0 (four images tiled, roughly halving object size) and scale=0.5
+    # (a 50-150% rescale on top), which together push a large share of boxes
+    # below the 8 px floor they were exported at. Keep some of both for
+    # robustness, far less than stock.
+    [[ "$*" == *scale=* ]]  || defaults+=("scale=${YOLO_SCALE:-0.25}")
+    [[ "$*" == *mosaic=* ]] || defaults+=("mosaic=${YOLO_MOSAIC:-0.4}")
     # Deliberately NOT sourcing ROS: it puts its own cv2 and numpy on
     # PYTHONPATH, which shadow the venv's and break the training imports.
     exec "$yolo_bin" detect train "${defaults[@]}" "$@"

@@ -205,10 +205,67 @@ not run on it. `ultralytics` (8.4.155, which ships YOLO26) lives there too.
 
 `./run.sh train` deliberately does **not** source ROS 2 — Jazzy puts its own
 `cv2` and `numpy` on `PYTHONPATH`, which shadow the venv's and break the
-training imports. It defaults to `model=yolo26s-p2.yaml` and **`imgsz=1152`**:
-the ports are ~19 px in a 1152-wide frame, and the usual `imgsz=640` would
-shrink them to ~11 px. The P2 config adds a stride-4 detection level, which is
-where an object that small has enough grid cells to be localised.
+training imports.
+
+Its defaults are all tuned around one fact: **the ports are ~17 px** (median,
+measured over 991 frames).
+
+| Default | Value | Why |
+|---|---|---|
+| `model` | `yolo26s-p2.yaml` | P2 adds a stride-4 level; at stride 8 a 17 px box spans ~2 cells |
+| `imgsz` | 1152 | native width. At 640 the ports shrink to ~9 px |
+| `batch` | -1 | auto-fit. A P2 head at 1152 holds a 288x288 stride-4 map, so the stock `batch=16` (tuned at 640, no P2) is not the same ask |
+| `scale` | 0.25 | stock 0.5 rescales 50-150%, pushing boxes under the 8 px export floor |
+| `mosaic` | 0.4 | stock 1.0 tiles four images, roughly halving object size — on top of `scale` |
+
+Each is overridable per-run (`./run.sh train batch=8`) or by env var
+(`YOLO_BATCH`, `YOLO_SCALE`, `YOLO_MOSAIC`, `YOLO_MODEL`, `YOLO_IMGSZ`).
+
+**The default `model=` is an architecture file, so training starts from random
+weights.** `pretrained=True` is the ultralytics default but is a no-op here: it
+only loads anything when it is a *path*, or disables loading when `False`. The
+smoke tests that scored 0.995 used `yolo26n.pt`, which *was* pretrained, so
+switching to a P2 config silently dropped that. To get both a P2 head and COCO
+initialisation, pass the weights explicitly — matching layers transfer, the
+rest stay random:
+
+```bash
+./run.sh train pretrained=yolo26s.pt epochs=100
+```
+
+### Where the results go, and how to use them
+
+`project` defaults to `$REPO/runs` and ultralytics picks the run name, so a
+plain `./run.sh train` lands in **`runs/train/`** (then `train2`, `train3`, ...;
+the smoke tests used explicit names and sit in `runs/smoke_*`). `runs/` is
+gitignored. Inside:
+
+| Path | What |
+|---|---|
+| `weights/best.pt` | **the model you want** — best val mAP50-95 |
+| `weights/last.pt` | final epoch; resume with `resume=True` |
+| `results.csv` | per-epoch losses and metrics |
+| `args.yaml` | every setting the run used, including the defaults above |
+| `confusion_matrix.png`, `*_curve.png` | val diagnostics |
+| `val_batch*_pred.jpg` | predictions vs labels, the fastest sanity check |
+
+Using `best.pt` afterwards, all through `~/.venv/bin/yolo` (never a ROS-sourced
+shell):
+
+```bash
+# score it again, or against a different dataset
+~/.venv/bin/yolo detect val model=runs/train/weights/best.pt data=yolo_dataset/data.yaml imgsz=1152
+
+# run it on images
+~/.venv/bin/yolo detect predict model=runs/train/weights/best.pt source=<img-or-dir> imgsz=1152 save=True
+
+# export for deployment (ONNX/TensorRT)
+~/.venv/bin/yolo export model=runs/train/weights/best.pt format=onnx imgsz=1152
+```
+
+**Always pass `imgsz=1152` at inference.** The checkpoint records it, but a
+caller that omits it gets 640, which shrinks a 17 px port to ~9 px and the
+detector will look far worse than it is.
 
 Smoke-tested on the 60-image set: `yolo26n.pt` reaches mAP50 0.995 in 2.8
 minutes, `yolo26n-p2.yaml` 0.995 in 3.2 minutes. Those numbers are a proof that
