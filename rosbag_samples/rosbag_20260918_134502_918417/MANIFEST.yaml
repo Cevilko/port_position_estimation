@@ -1,0 +1,88 @@
+source_bag: rosbags/rosbag_20260918_134502_918417
+output_directory: rosbag_samples/rosbag_20260918_134502_918417
+frame_count: 19
+skipped_groups: 0
+camera_info:
+  - topic: /center_camera/camera_info
+    file: rosbag_samples/rosbag_20260918_134502_918417/camera_info/center_camera_camera_info.yaml
+  - topic: /left_camera/camera_info
+    file: rosbag_samples/rosbag_20260918_134502_918417/camera_info/left_camera_camera_info.yaml
+  - topic: /right_camera/camera_info
+    file: rosbag_samples/rosbag_20260918_134502_918417/camera_info/right_camera_camera_info.yaml
+frames:
+  - index: 0
+    bag_timestamp_ns: 3566666852
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00000
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00000/frame.yaml
+  - index: 1
+    bag_timestamp_ns: 15133334122
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00001
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00001/frame.yaml
+  - index: 2
+    bag_timestamp_ns: 36733335249
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00002
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00002/frame.yaml
+  - index: 3
+    bag_timestamp_ns: 40266668766
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00003
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00003/frame.yaml
+  - index: 4
+    bag_timestamp_ns: 54350002834
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00004
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00004/frame.yaml
+  - index: 5
+    bag_timestamp_ns: 59883336456
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00005
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00005/frame.yaml
+  - index: 6
+    bag_timestamp_ns: 62400003254
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00006
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00006/frame.yaml
+  - index: 7
+    bag_timestamp_ns: 66950003491
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00007
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00007/frame.yaml
+  - index: 8
+    bag_timestamp_ns: 69966670315
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00008
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00008/frame.yaml
+  - index: 9
+    bag_timestamp_ns: 80533337533
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00009
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00009/frame.yaml
+  - index: 10
+    bag_timestamp_ns: 84066671051
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00010
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00010/frame.yaml
+  - index: 11
+    bag_timestamp_ns: 87083337875
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00011
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00011/frame.yaml
+  - index: 12
+    bag_timestamp_ns: 93133338190
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00012
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00012/frame.yaml
+  - index: 13
+    bag_timestamp_ns: 102183338662
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00013
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00013/frame.yaml
+  - index: 14
+    bag_timestamp_ns: 113250005906
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00014
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00014/frame.yaml
+  - index: 15
+    bag_timestamp_ns: 122816673072
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00015
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00015/frame.yaml
+  - index: 16
+    bag_timestamp_ns: 128350006693
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00016
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00016/frame.yaml
+  - index: 17
+    bag_timestamp_ns: 131883340211
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00017
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00017/frame.yaml
+  - index: 18
+    bag_timestamp_ns: 135916673755
+    directory: rosbag_samples/rosbag_20260918_134502_918417/frames/00018
+    frame: rosbag_samples/rosbag_20260918_134502_918417/frames/00018/frame.yaml

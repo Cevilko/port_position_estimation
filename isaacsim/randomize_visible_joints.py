@@ -111,15 +111,23 @@ def parse_args() -> argparse.Namespace:
         "--port-pos-span",
         type=float,
         nargs=3,
-        default=(0.02, 0.02, 0.0),
+        default=(0.06, 0.06, 0.0),
         metavar=("X", "Y", "Z"),
-        help="half-width in metres of the random offset applied to the NIC card fixture",
+        help=(
+            "half-width in metres of the random offset applied to the NIC card "
+            "fixture; z defaults to 0 because the base sits on the table and "
+            "lifting it looks unphysical"
+        ),
     )
     parser.add_argument(
         "--port-yaw-span",
         type=float,
-        default=0.20,
-        help="half-width in radians of the fixture's random yaw about world +z",
+        default=math.pi,
+        help=(
+            "half-width in radians of the fixture's random yaw about world +z; "
+            "the default is a full turn, which is safe because the ports face "
+            "straight up and a z-rotation leaves that normal unchanged"
+        ),
     )
     parser.add_argument(
         "--port-group-prims",
@@ -131,6 +139,24 @@ def parse_args() -> argparse.Namespace:
         "--port-pivot-prim",
         default="/nic_card_visual",
         help="prim whose position the fixture's yaw turns about",
+    )
+    parser.add_argument(
+        "--max-view-angle",
+        type=float,
+        default=70.0,
+        help=(
+            "reject a pose unless every port's outward normal is within this "
+            "many degrees of the direction to the camera; past 90 the camera is "
+            "behind the opening and sees the back of the card"
+        ),
+    )
+    parser.add_argument(
+        "--keep-position-controller",
+        action="store_true",
+        help=(
+            "leave the scene's ArticulationController running; it drives the arm "
+            "to a fixed pose every tick, which overrides sampled joint positions"
+        ),
     )
     parser.add_argument(
         "--no-randomize-ports",
@@ -163,7 +189,7 @@ def parse_args() -> argparse.Namespace:
         "--joint-span",
         type=float,
         nargs="+",
-        default=(0.35,),
+        default=(0.8,),
         help=(
             "random half-width in radians around the nominal pose; give one value "
             "for all joints or six values in ARM_JOINT_NAMES order"
@@ -307,6 +333,13 @@ def main() -> int:
         nominal = np.asarray(ARM_DEFAULT_POSITIONS, dtype=float)
     else:
         nominal = _current_arm_positions(articulation, joint_indices, np)
+    # Only now: the nominal is read from the live pose, and until this point the
+    # scene's controller is what holds the arm there. Disabling it earlier would
+    # let the arm sag first and centre every sample on the sag instead.
+    if not args.keep_position_controller:
+        stopped = _disable_competing_controllers(stage, og)
+        print(f"controller: disabled {stopped or 'none found'}")
+
     low, high = _sampling_bounds(args, nominal, np)
     rng = np.random.default_rng(args.seed)
 
@@ -346,7 +379,9 @@ def main() -> int:
                 fixture.apply(fixture_yaw, fixture_offset)
             _wait_seconds(app, timeline, args.settle_timeout)
 
-            visible = _camera_contains_prims(camera_prim, port_prims, Usd, UsdGeom, Gf)
+            visible = _camera_contains_prims(
+                camera_prim, port_prims, Usd, UsdGeom, Gf, args.max_view_angle
+            )
             if visible:
                 accepted += 1
                 last_accepted = candidate.copy()
@@ -438,6 +473,7 @@ def _wait_seconds(app, timeline, seconds: float) -> None:
             return
 
 
+ARTICULATION_CONTROLLER_NODE_TYPE = "isaacsim.core.nodes.IsaacArticulationController"
 CLOCK_NODE_TYPE = "isaacsim.ros2.bridge.ROS2PublishClock"
 SIM_TIME_NODE_TYPE = "isaacsim.core.nodes.IsaacReadSimulationTime"
 CONTEXT_NODE_TYPE = "isaacsim.ros2.bridge.ROS2Context"
@@ -528,6 +564,41 @@ def _wait_until_still(app, timeline, articulation, joint_indices, np,
         if elapsed < 0 or elapsed >= timeout:
             return speed
         app.update()
+
+
+def _disable_competing_controllers(stage, og):
+    """Stop ArticulationController nodes from overriding the sampled pose.
+
+    The scene drives the arm to one fixed joint command on every tick. Setting
+    joint positions without stopping that means the controller pulls the arm
+    straight back: barely visible if you capture immediately, total once you
+    capture after a hold. Symptoms are joints that never settle and a camera
+    that hardly moves however wide the sampling span is.
+    """
+    disabled = []
+    for prim in stage.Traverse():
+        if _node_type(prim) != ARTICULATION_CONTROLLER_NODE_TYPE:
+            continue
+        path = prim.GetPath().pathString
+        node = og.Controller.node(path)
+        try:
+            node.set_disabled(True)
+            disabled.append(path)
+            continue
+        except AttributeError:
+            pass
+        source = prim.GetAttribute("inputs:execIn").GetConnections()
+        if source:
+            og.Controller.edit(
+                path.rsplit("/", 1)[0],
+                {
+                    og.Controller.Keys.DISCONNECT: [
+                        (str(source[0]), f"{path}.inputs:execIn")
+                    ]
+                },
+            )
+            disabled.append(path)
+    return disabled
 
 
 def _resolve_service_client_prim(stage, query: str):
@@ -789,17 +860,38 @@ def _author_arm_joint_state(robot_prim, positions, UsdPhysics) -> None:
                 joint_state.Set(value)
 
 
-def _camera_contains_prims(camera_prim, target_prims, Usd, UsdGeom, Gf) -> bool:
+def _camera_contains_prims(
+    camera_prim, target_prims, Usd, UsdGeom, Gf, max_view_angle: float = 70.0
+) -> bool:
+    """True when every port is in frustum AND facing the camera.
+
+    In-frustum alone is not visibility. A port entrance is an opening in one
+    face of the cage, so once the camera passes the plane of that face it sees
+    the back of the card while the port's origin is still happily inside the
+    frustum. Labelling those produces boxes over a surface with no port in it.
+    The entrance frame's local +y is the outward normal, so the angle between
+    it and the direction to the camera is the test.
+    """
     time = Usd.TimeCode.Default()
     camera = UsdGeom.Camera(camera_prim)
     gf_camera = camera.GetCamera(time)
-    gf_camera.transform = camera.ComputeLocalToWorldTransform(time)
+    camera_to_world = camera.ComputeLocalToWorldTransform(time)
+    gf_camera.transform = camera_to_world
     frustum = gf_camera.frustum
+    camera_position = camera_to_world.ExtractTranslation()
+    cosine_limit = math.cos(math.radians(max_view_angle))
 
-    return all(
-        frustum.Intersects(Gf.Vec3d(_world_position(prim, time, UsdGeom)))
-        for prim in target_prims
-    )
+    for prim in target_prims:
+        transform = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(time)
+        position = transform.ExtractTranslation()
+        if not frustum.Intersects(Gf.Vec3d(position)):
+            return False
+
+        normal = Gf.Vec3d(transform.ExtractRotationMatrix()[1]).GetNormalized()
+        to_camera = Gf.Vec3d(camera_position - position).GetNormalized()
+        if Gf.Dot(normal, to_camera) < cosine_limit:
+            return False
+    return True
 
 
 def _world_position(prim, time, UsdGeom):

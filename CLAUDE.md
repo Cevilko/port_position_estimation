@@ -70,8 +70,26 @@ Two things, independently, per attempt:
   entrance frames (children of the card) follow automatically into `/tf`.
   `--no-randomize-ports` restores the old fixed-fixture behaviour.
 
-Both are vetted together by the frustum test, so an accepted sample is one where
-that arm pose sees those ports.
+Both are vetted together by the acceptance test, so an accepted sample is one
+where that arm pose sees those ports.
+
+**The scene fights the sampler, and silently.** `/Graphs/Position_Controller`
+drives the arm to one fixed joint command on every playback tick. Setting joint
+positions without stopping it means the arm is pulled straight back: barely
+visible when the capture is immediate, total once the capture happens after a
+hold. The symptom is a camera that hardly moves however wide `--joint-span` is —
+it was 9 mm of travel across 20 episodes — together with joints that never
+settle. The sampler now disables every `IsaacArticulationController` node after
+reading the nominal pose from it (order matters: disable first and the arm sags,
+and every sample centres on the sag). `--keep-position-controller` opts out.
+
+**In frustum is not visible.** A port entrance is an opening in one face of the
+cage, so once the camera passes the plane of that face it sees the back of the
+card while the port's origin is still inside the frustum. With wide sampling the
+camera reaches below the ports (they sit at z≈1.297) and this happened in 3 of
+20 episodes, labelling boxes over blank card. Acceptance now also requires each
+port's outward normal to be within `--max-view-angle` (70°) of the direction to
+the camera.
 
 ## Things that will bite you
 

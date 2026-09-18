@@ -1,0 +1,16 @@
+header:
+  stamp:
+    sec: 54
+    nanosec: 300002831
+  frame_id: world
+child_frame_id: sfp_port_1_entrance
+transform:
+  translation:
+    x: 0.34104686975479126
+    y: 0.3554800748825073
+    z: 1.297432541847229
+  rotation:
+    x: -0.23525525129061647
+    y: 0.6597811439348965
+    z: 0.6711078739452551
+    w: -0.24281274755833543
