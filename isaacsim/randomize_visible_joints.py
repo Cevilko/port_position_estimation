@@ -69,6 +69,11 @@ PORT_GROUP_PRIMS = (
 #: keeps it standing is yaw about world +z.
 PORT_YAW_AXIS = "z"
 
+#: The aperture the labeller projects, in metres, used here to sample the port
+#: at its corners as well as its centre rather than trusting a single ray.
+PORT_APERTURE_WIDTH = 0.0122
+PORT_APERTURE_HEIGHT = 0.00715
+
 # Headless rendering runs slower than real time, so a sim-time wait is allowed
 # this multiple of wall-clock seconds before it is treated as stalled.
 WAIT_WALL_CLOCK_LIMIT = 20.0
@@ -139,6 +144,23 @@ def parse_args() -> argparse.Namespace:
         "--port-pivot-prim",
         default="/nic_card_visual",
         help="prim whose position the fixture's yaw turns about",
+    )
+    parser.add_argument(
+        "--no-occlusion-check",
+        action="store_true",
+        help="accept poses without testing whether anything blocks the ports",
+    )
+    parser.add_argument(
+        "--occlusion-tolerance",
+        type=float,
+        default=0.005,
+        help="metres nearer than a port a surface must be to count as blocking it",
+    )
+    parser.add_argument(
+        "--probe-width",
+        type=int,
+        default=288,
+        help="width of the offscreen depth render used for the occlusion test",
     )
     parser.add_argument(
         "--max-view-angle",
@@ -340,6 +362,17 @@ def main() -> int:
         stopped = _disable_competing_controllers(stage, og)
         print(f"controller: disabled {stopped or 'none found'}")
 
+    probe = None
+    if not args.no_occlusion_check:
+        import omni.replicator.core as rep
+
+        height = max(1, int(round(args.probe_width * 1024 / 1152)))
+        probe = _VisibilityProbe(
+            rep, np, Gf, camera_prim.GetPath().pathString, args.probe_width, height
+        )
+        _pump(app, 10)
+        print(f"probe:  {args.probe_width}x{height} depth render on {camera_prim.GetPath()}")
+
     low, high = _sampling_bounds(args, nominal, np)
     rng = np.random.default_rng(args.seed)
 
@@ -363,6 +396,7 @@ def main() -> int:
 
     accepted = 0
     last_accepted = None
+    rejections: dict[str, int] = {}
     while accepted < args.samples:
         for attempt in range(1, args.max_attempts + 1):
             candidate = rng.uniform(low, high)
@@ -379,10 +413,12 @@ def main() -> int:
                 fixture.apply(fixture_yaw, fixture_offset)
             _wait_seconds(app, timeline, args.settle_timeout)
 
-            visible = _camera_contains_prims(
-                camera_prim, port_prims, Usd, UsdGeom, Gf, args.max_view_angle
+            rejection = _camera_contains_prims(
+                camera_prim, port_prims, Usd, UsdGeom, Gf, args.max_view_angle,
+                probe, args.occlusion_tolerance,
             )
-            if visible:
+            rejections[rejection] = rejections.get(rejection, 0) + 1
+            if not rejection:
                 accepted += 1
                 last_accepted = candidate.copy()
                 print(
@@ -416,6 +452,11 @@ def main() -> int:
                 "No visible joint sample found. Try reducing --joint-span, "
                 "setting --nominal near a known good pose, or increasing --max-attempts."
             )
+
+    summary = ", ".join(
+        f"{reason or 'accepted'}={count}" for reason, count in sorted(rejections.items())
+    )
+    print(f"attempts: {summary}")
 
     if args.save:
         save_path = str(Path(args.save).expanduser().resolve())
@@ -480,6 +521,66 @@ CONTEXT_NODE_TYPE = "isaacsim.ros2.bridge.ROS2Context"
 SERVICE_CLIENT_NODE_TYPE = "isaacsim.ros2.bridge.OgnROS2ServiceClient"
 PLAYBACK_TICK_NODE_TYPE = "omni.graph.action.OnPlaybackTick"
 RECORD_GATE_NAME = "record_gate"
+
+
+class _VisibilityProbe:
+    """Depth-buffer occlusion test for points in the sampling camera's view.
+
+    A physics raycast is no use here: the card carries no colliders and neither
+    does the gripper, so a ray would pass through both. The rendered depth
+    buffer sees whatever the camera sees, whatever it is made of.
+
+    The test is one-sided on purpose. A port entrance is a hole, so an
+    unobstructed sample reads the inside of the cage *behind* the entrance
+    plane and comes back farther than the entrance. Only depth that is clearly
+    nearer than the entrance means something is in the way.
+    """
+
+    def __init__(self, rep, np, Gf, camera_path: str, width: int, height: int):
+        self._np = np
+        self._Gf = Gf
+        self._size = (width, height)
+        self._render_product = rep.create.render_product(camera_path, (width, height))
+        self._annotator = rep.AnnotatorRegistry.get_annotator("distance_to_camera")
+        self._annotator.attach([self._render_product])
+        self._warned = False
+
+    def _depth(self):
+        data = self._annotator.get_data()
+        if data is None:
+            return None
+        array = self._np.asarray(data)
+        return array if array.size and array.ndim == 2 else None
+
+    def occluded_points(self, points_world, frustum, camera_position, tolerance):
+        """How many of ``points_world`` are blocked, and how many were testable."""
+        depth = self._depth()
+        if depth is None:
+            if not self._warned:
+                print("warning: no depth from the visibility probe; occlusion unchecked")
+                self._warned = True
+            return 0, 0
+
+        height, width = depth.shape
+        view = frustum.ComputeViewMatrix()
+        projection = frustum.ComputeProjectionMatrix()
+        blocked = 0
+        tested = 0
+        for point in points_world:
+            clip = self._Gf.Vec4d(point[0], point[1], point[2], 1.0) * view * projection
+            if clip[3] <= 0.0:
+                continue
+            ndc_x, ndc_y = clip[0] / clip[3], clip[1] / clip[3]
+            px = int((ndc_x * 0.5 + 0.5) * width)
+            py = int((1.0 - (ndc_y * 0.5 + 0.5)) * height)
+            if not (0 <= px < width and 0 <= py < height):
+                continue
+            tested += 1
+            expected = float(self._np.linalg.norm(self._np.asarray(point) - camera_position))
+            measured = float(depth[py, px])
+            if measured > 0.0 and measured < expected - tolerance:
+                blocked += 1
+        return blocked, tested
 
 
 def _quat_multiply_wxyz(a, b, np):
@@ -860,9 +961,24 @@ def _author_arm_joint_state(robot_prim, positions, UsdPhysics) -> None:
                 joint_state.Set(value)
 
 
+def _port_sample_points(transform, Gf):
+    """Aperture centre and corners in world space, from the entrance frame."""
+    half_w = PORT_APERTURE_WIDTH / 2.0
+    half_h = PORT_APERTURE_HEIGHT / 2.0
+    local = [
+        (0.0, 0.0, 0.0),
+        (-half_w, 0.0, -half_h),
+        (half_w, 0.0, -half_h),
+        (half_w, 0.0, half_h),
+        (-half_w, 0.0, half_h),
+    ]
+    return [transform.Transform(Gf.Vec3d(*point)) for point in local]
+
+
 def _camera_contains_prims(
-    camera_prim, target_prims, Usd, UsdGeom, Gf, max_view_angle: float = 70.0
-) -> bool:
+    camera_prim, target_prims, Usd, UsdGeom, Gf, max_view_angle: float = 70.0,
+    probe=None, occlusion_tolerance: float = 0.005,
+) -> str:
     """True when every port is in frustum AND facing the camera.
 
     In-frustum alone is not visibility. A port entrance is an opening in one
@@ -885,13 +1001,24 @@ def _camera_contains_prims(
         transform = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(time)
         position = transform.ExtractTranslation()
         if not frustum.Intersects(Gf.Vec3d(position)):
-            return False
+            return "out of frustum"
 
         normal = Gf.Vec3d(transform.ExtractRotationMatrix()[1]).GetNormalized()
         to_camera = Gf.Vec3d(camera_position - position).GetNormalized()
         if Gf.Dot(normal, to_camera) < cosine_limit:
-            return False
-    return True
+            return "facing away"
+
+        if probe is not None:
+            points = _port_sample_points(transform, Gf)
+            blocked, tested = probe.occluded_points(
+                points, frustum, camera_position, occlusion_tolerance
+            )
+            # Any blocked sample rejects the pose: the test only fires when a
+            # surface is nearer than the entrance, which an unobstructed port
+            # never produces, so a single hit is already strong evidence.
+            if blocked or (tested and tested < len(points)):
+                return "occluded"
+    return ""
 
 
 def _world_position(prim, time, UsdGeom):

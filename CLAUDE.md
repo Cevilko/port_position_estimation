@@ -83,6 +83,18 @@ settle. The sampler now disables every `IsaacArticulationController` node after
 reading the nominal pose from it (order matters: disable first and the arm sags,
 and every sample centres on the sag). `--keep-position-controller` opts out.
 
+**Occlusion is tested against the rendered depth, not physics.** A physics
+raycast would be useless: the whole scene has 11 colliders, none on the gripper
+and none on the card, so a ray hits nothing. The sampler instead attaches a
+small `distance_to_camera` render product to the sampling camera and compares
+measured depth against the distance to each port's aperture centre and corners.
+The test is one-sided on purpose — a port entrance is a hole, so an
+unobstructed sample reads the *inside* of the cage and comes back farther than
+the entrance; only depth clearly nearer means something is in the way.
+`--no-occlusion-check` disables it, `--occlusion-tolerance` sets the margin.
+On a fixed seed it rejects poses nothing else catches: accepted 6, out of
+frustum 114, facing away 16, occluded 7.
+
 **In frustum is not visible.** A port entrance is an opening in one face of the
 cage, so once the camera passes the plane of that face it sees the back of the
 card while the port's origin is still inside the frustum. With wide sampling the
