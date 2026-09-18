@@ -138,6 +138,27 @@ the camera.
   `frame_id: sim_camera` for all three**, which is ambiguous; identify cameras
   in those by topic, not `frame_id`. `extract_rosbag_samples.py` is unaffected
   either way — it resolves cameras through `TF_FRAME_ALIASES` against `/tf`.
+- **A verification heuristic tuned at one scale lies when the scale changes.**
+  The aperture detector used to check label quality needs filters that scale
+  with the projected box. With fixed pixel limits it silently dropped close-up
+  ports — five ports 56–65 px wide read as "not visible" when they were
+  perfectly visible and correctly boxed. That looked like a pipeline fault and
+  was not. Wide randomization makes boxes range ~10–65 px, so any check with
+  hard-coded pixel limits will misreport.
+- **The record client's warm-up pulse is not reliably a no-op.** The sampler
+  fires one pulse at startup to initialise the service client, on the assumption
+  that the node's first compute only initialises. Usually true; once observed
+  producing a real capture, giving 21 recordings for 20 accepted poses. The
+  extra frame is internally consistent (its labels come from its own `/tf`), but
+  do not assume frame count equals episode count.
+- **tf2 refuses to extrapolate, and that costs the occasional sample.** If an
+  image's stamp is newer than the newest `/tf`, the lookup fails and the
+  recording is rejected with `Nothing recorded`. Correct behaviour — better than
+  a mislabelled frame — but budget a few percent loss at wide sampling ranges.
+- **`export_yolo_dataset.py` appends, it does not clean.** Filenames are
+  prefixed by bag name, so a second export lands alongside the first. That is
+  useful for accumulating runs into one dataset and a trap if you expected a
+  replacement: delete `yolo_dataset/` first when you want only the latest run.
 - **Never edit `ros_ws/install/`.** Rebuild with `./run.sh build`.
 - **The USD scene references assets by absolute path into `~/IsaacLab`,** and
   three of those references are already dead — see `unresolved_references` in
