@@ -113,6 +113,22 @@ the camera.
   default to the newest bag, and a bag is only "newest" once it has a
   `metadata.yaml` — rosbag2 writes that on close, so stop the recorder before
   extracting or you will silently get the previous bag.
+- **Stopping the recorder means signalling the node, not `ros2 run`.**
+  `./run.sh recorder` ends in `exec ros2 run bag_recorder_node ...`, and
+  `ros2 run` launches the node as a *child*. SIGINT to the `ros2 run` pid leaves
+  the node alive, the writer open and `metadata.yaml` unwritten — the bag then
+  looks like it is still being recorded and `extract` silently takes the
+  previous one. Signal the process whose argv is
+  `ros_ws/install/bag_recorder_node/lib/bag_recorder_node`, then wait for
+  `metadata.yaml` to appear before extracting.
+- **`pgrep -f` and `pkill -f` match the shell you are running them from.** The
+  pattern appears in your own command line, so `pgrep -f bag_recorder_node`
+  reports a hit when nothing is running, and `pkill -f` kills the wrapper shell
+  issuing the kill. Both have wasted time here: once killing the wrong process,
+  once reporting a phantom recorder, and once hanging a wait-loop that was
+  waiting on itself. Match on something more specific (the install path), or
+  filter with `ps -eo pid,args | grep <pat> | grep -v grep`, and treat a bare
+  name match as unreliable.
 - **A trigger fired before every topic has arrived records nothing.**
   `bag_recorder_node` checks all seven subscriptions first and rejects the
   `Trigger` with `success=False` and the list of missing topics, so this is a
@@ -145,20 +161,35 @@ the camera.
   perfectly visible and correctly boxed. That looked like a pipeline fault and
   was not. Wide randomization makes boxes range ~10–65 px, so any check with
   hard-coded pixel limits will misreport.
-- **The record client's warm-up pulse is not reliably a no-op.** The sampler
-  fires one pulse at startup to initialise the service client, on the assumption
-  that the node's first compute only initialises. Usually true; once observed
-  producing a real capture, giving 21 recordings for 20 accepted poses. The
-  extra frame is internally consistent (its labels come from its own `/tf`), but
-  do not assume frame count equals episode count.
+- **The record gate fires spuriously, so frame count is not episode count.**
+  Two causes, both sub-1% and neither worth chasing. The warm-up pulse the
+  sampler fires at startup to initialise the service client is usually a no-op
+  but has produced a real capture (21 recordings for 20 poses). And the gate
+  itself sometimes fires twice for one pose: over 1000 episodes, 991 captures
+  came from 1000 accepted poses *after* 12 were lost to tf2, meaning 3 extra
+  triggers. Duplicates are byte-identical in pose and internally consistent;
+  strays land at poses that were never accepted, with the camera pointed away
+  from the card, and export as correct empty-label negatives. Nothing
+  downstream may assume one frame per episode.
 - **tf2 refuses to extrapolate, and that costs the occasional sample.** If an
   image's stamp is newer than the newest `/tf`, the lookup fails and the
   recording is rejected with `Nothing recorded`. Correct behaviour — better than
-  a mislabelled frame — but budget a few percent loss at wide sampling ranges.
+  a mislabelled frame. Measured at **1.2%** over 1000 episodes (12 lost). A
+  20-episode run once lost 2 and suggested 10%; that was small-sample noise, so
+  budget ~1% and do not size a run around the pessimistic figure.
 - **`export_yolo_dataset.py` appends, it does not clean.** Filenames are
   prefixed by bag name, so a second export lands alongside the first. That is
   useful for accumulating runs into one dataset and a trap if you expected a
   replacement: delete `yolo_dataset/` first when you want only the latest run.
+- **Export with `--drop-inconsistent`, or you teach the detector that a port is
+  background.** A port too small (`--min-pixels`, default 8) or clipped by the
+  edge cannot be labelled, so its box is dropped — but the image was still
+  written, and if the *other* port in it labelled fine, that picture now calls
+  the same object both foreground and background. It hit 76 images in a
+  991-frame run. The flag skips those images instead, and leaves pure negatives
+  alone: an image where no port projects is legitimately empty and worth
+  keeping. Off by default so old exports reproduce; the current dataset was
+  built with it.
 - **Never edit `ros_ws/install/`.** Rebuild with `./run.sh build`.
 - **The USD scene references assets by absolute path into `~/IsaacLab`,** and
   three of those references are already dead — see `unresolved_references` in
@@ -183,6 +214,11 @@ Smoke-tested on the 60-image set: `yolo26n.pt` reaches mAP50 0.995 in 2.8
 minutes, `yolo26n-p2.yaml` 0.995 in 3.2 minutes. Those numbers are a proof that
 the chain runs, not a result — train and val are near-duplicate views of one
 fixture position.
+
+**How the current dataset was built, and what is wrong with it, is in
+`docs/dataset.md`** — provenance, the exact sampler flags, yield and rejection
+counts, box-size distribution, and the caveats that matter before you believe a
+trained number. Read it before training on `yolo_dataset/` or regenerating it.
 
 ## Reading the scene without launching Isaac Sim
 
