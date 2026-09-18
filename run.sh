@@ -68,6 +68,10 @@ Pipeline, in the order you run it:
                      (e.g. ./run.sh sample --samples 20 --seed 0 --headless)
   extract [bag]      pull sample frames + TF + CameraInfo out of a recorded bag
                      into rosbag_samples/ (default: rosbags/rosbag_0)
+  detect [args]      run the trained detector on live camera topics, publishing
+                     vision_msgs/Detection2DArray per camera. Args pass through
+                     as ROS params (model:=... conf:=... imgsz:=...).
+                     Use this, NOT `ros2 run` -- see the note below.
 
 Inspection and verification -- none of these need Isaac Sim:
 
@@ -139,6 +143,25 @@ sample)
 extract)
     with_ros
     exec "$SYSTEM_PYTHON" "$REPO/scripts/extract_rosbag_samples.py" "$@"
+    ;;
+
+detect)
+    # The one step that needs ROS 2 *and* torch in the same process. That works
+    # only because Jazzy and the venv are both Python 3.12, so rclpy's cp312
+    # extension modules load under the venv interpreter. `ros2 run` cannot do
+    # this: colcon gives the console script a /usr/bin/python3 shebang and that
+    # interpreter has no torch.
+    with_ros
+    require_file "$TRAIN_PYTHON" "no venv interpreter at $TRAIN_PYTHON (override with TRAIN_PYTHON=...)"
+    require_file "$REPO/ros_ws/install/setup.bash" "workspace not built -- run ./run.sh build first"
+    model="${YOLO_WEIGHTS:-$REPO/runs/sfp_yolo26s_p2/weights/best.pt}"
+    require_file "$model" "no trained weights at $model.
+       Train first with ./run.sh train, or point YOLO_WEIGHTS at a .pt file."
+    args=()
+    [[ "$*" == *model:=* ]] || args+=("-p" "model:=$model")
+    cd "$REPO"
+    exec "$TRAIN_PYTHON" -m yolo_detector_node.yolo_detector_node --ros-args \
+        -p use_sim_time:=true "${args[@]}" "$@"
     ;;
 
 yolo)

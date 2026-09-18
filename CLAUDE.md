@@ -292,6 +292,39 @@ train and val there were near-duplicate views of one fixture position.
 counts, box-size distribution, and the caveats that matter before you believe a
 trained number. Read it before training on `yolo_dataset/` or regenerating it.
 
+## Running the detector on live topics
+
+`./run.sh detect` subscribes to the three camera topics, runs `best.pt` on each
+frame and publishes `vision_msgs/Detection2DArray` on `<camera>/detections`,
+plus an annotated `<camera>/detections_image`. Measured at **6 ms/frame** on
+replayed bag data, so the camera is the bottleneck, not the model.
+
+**`ros2 run yolo_detector_node yolo_detector_node` does NOT work.** colcon gives
+the console script a `/usr/bin/python3` shebang and that interpreter has no
+torch. `./run.sh detect` runs the same module under `TRAIN_PYTHON` instead,
+with ROS 2 sourced. This works at all only because Jazzy and the venv are
+**both Python 3.12**, so rclpy's cp312 extension modules import cleanly under
+the venv. It is exactly the coincidence that Isaac Sim (3.11) does not enjoy.
+
+**`cv_bridge` is not used, and must not be.** It is compiled against NumPy 1.x;
+under the venv's NumPy 2.x, importing it does not raise — **it segfaults the
+process**. `yolo_detector_node/image_convert.py` replaces it with a numpy
+reshape. That is strictly less code for the 8-bit encodings a camera actually
+publishes, and it is covered by tests. Two traps it handles that a naive
+reshape does not: the scene publishes **`rgb8`**, which must be reversed to the
+BGR ultralytics expects, and `step` is a row stride that may exceed
+`width * channels`, so rows must be sliced individually or the image shears.
+A third: the unpacked array must be **copied**, not just made contiguous —
+`np.ascontiguousarray` returns the same read-only array when the data is
+already contiguous, and `predict()` letterboxes in place.
+
+**Default QoS is RELIABLE, matching the scene.** `bag_recorder_node` receives
+frames with a plain depth-1 reliable subscription, so the publisher is
+reliable; a `BEST_EFFORT` subscriber would match nothing and sit silent. Pass
+`-p best_effort:=true` for a camera that publishes best-effort. The node warns
+every 10 s while it has received no images, which is what that failure looks
+like from the outside.
+
 ## Reading the scene without launching Isaac Sim
 
 `isaacsim/scene.usd` is binary USDC and gitignored. Its tracked, readable proxy
