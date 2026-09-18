@@ -75,3 +75,73 @@ def test_box_is_usable_rejects_a_box_clipped_by_the_image_edge():
 
 def test_box_is_usable_rejects_a_box_touching_the_bottom_edge():
     assert not export.box_is_usable((100.0, 1000.0, 120.0, 1023.0), (1152, 1024), 8.0, 1.0)
+
+
+def _frame(tmp_path, name, boxes):
+    """A minimal extracted-frame tree that project_port_bboxes can be faked over."""
+    frame = tmp_path / "frames" / name
+    (frame / "images").mkdir(parents=True)
+    for camera in export.CAMERAS:
+        (frame / "images" / f"{camera}_image.jpg").write_bytes(b"jpeg")
+    return frame
+
+
+def test_drop_inconsistent_skips_an_image_with_an_unlabelable_port(tmp_path, monkeypatch):
+    """One port labelled and another visible but too small is contradictory."""
+
+    _frame(tmp_path, "00000", None)
+    good = (100.0, 100.0, 130.0, 130.0)
+    too_small = (400.0, 400.0, 403.0, 403.0)
+    monkeypatch.setattr(
+        export.ports, "bboxes_for_frame",
+        lambda *a, **k: ({"sfp_port_0_entrance": good,
+                          "sfp_port_1_entrance": too_small}, (1152, 1024)),
+    )
+
+    out = tmp_path / "strict"
+    summary = export.export(tmp_path, out, val_every=0, drop_inconsistent=True)
+    assert summary["train_images"] == 0
+    assert summary["inconsistent_images"] == 3  # one per camera
+
+
+def test_without_drop_inconsistent_the_image_is_kept(tmp_path, monkeypatch):
+    _frame(tmp_path, "00000", None)
+    monkeypatch.setattr(
+        export.ports, "bboxes_for_frame",
+        lambda *a, **k: ({"sfp_port_0_entrance": (100.0, 100.0, 130.0, 130.0),
+                          "sfp_port_1_entrance": (400.0, 400.0, 403.0, 403.0)}, (1152, 1024)),
+    )
+
+    summary = export.export(tmp_path, tmp_path / "loose", val_every=0)
+    assert summary["train_images"] == 3
+    assert summary["inconsistent_images"] == 0
+
+
+def test_drop_inconsistent_keeps_a_clean_image(tmp_path, monkeypatch):
+    """Nothing dropped means nothing contradictory, so the image stays."""
+
+    _frame(tmp_path, "00000", None)
+    monkeypatch.setattr(
+        export.ports, "bboxes_for_frame",
+        lambda *a, **k: ({"sfp_port_0_entrance": (100.0, 100.0, 130.0, 130.0),
+                          "sfp_port_1_entrance": (200.0, 200.0, 230.0, 230.0)}, (1152, 1024)),
+    )
+
+    summary = export.export(tmp_path, tmp_path / "clean", val_every=0, drop_inconsistent=True)
+    assert summary["train_images"] == 3
+    assert summary["boxes"] == 6
+
+
+def test_drop_inconsistent_keeps_a_pure_negative(tmp_path, monkeypatch):
+    """No port projects at all -- a legitimate negative, not a contradiction."""
+
+    _frame(tmp_path, "00000", None)
+    monkeypatch.setattr(
+        export.ports, "bboxes_for_frame",
+        lambda *a, **k: ({"sfp_port_0_entrance": None,
+                          "sfp_port_1_entrance": None}, (1152, 1024)),
+    )
+
+    summary = export.export(tmp_path, tmp_path / "neg", val_every=0, drop_inconsistent=True)
+    assert summary["train_images"] == 3
+    assert summary["images_without_boxes"] == 3

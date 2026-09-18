@@ -82,6 +82,7 @@ def export(
     width: float = ports.DEFAULT_APERTURE_WIDTH,
     height: float = ports.DEFAULT_APERTURE_HEIGHT,
     link: bool = False,
+    drop_inconsistent: bool = False,
 ):
     bag_dir = Path(bag_dir).resolve()
     output_root = Path(output_root)
@@ -95,6 +96,7 @@ def export(
     boxes_written = 0
     images_without_boxes = 0
     dropped = 0
+    inconsistent_images = 0
 
     frame_dirs = sorted((bag_dir / "frames").iterdir())
     for index, frame_dir in enumerate(frame_dirs):
@@ -111,13 +113,24 @@ def export(
                 continue
 
             rows = []
+            dropped_here = 0
             for label, box in frame_boxes.items():
                 if not box_is_usable(box, image_size, min_pixels, edge_margin):
                     if box is not None:
                         dropped += 1
+                        dropped_here += 1
                     continue
                 class_index = class_names.index(label) if per_port else 0
                 rows.append(to_yolo_line(class_index, box, image_size))
+
+            # A port that projects into the frame but is too small or clipped
+            # cannot be labelled, yet it is still visible in the pixels. Writing
+            # the image anyway teaches the detector that a visible port is
+            # background, and it contradicts the other port in the same image.
+            # Dropping the image loses one sample; keeping it corrupts two.
+            if drop_inconsistent and dropped_here:
+                inconsistent_images += 1
+                continue
 
             stem = f"{bag_dir.name}_{frame_dir.name}_{camera}"
             destination = output_root / "images" / split / f"{stem}.jpg"
@@ -154,6 +167,7 @@ def export(
         "boxes": boxes_written,
         "images_without_boxes": images_without_boxes,
         "dropped_boxes": dropped,
+        "inconsistent_images": inconsistent_images,
         "classes": class_names,
     }
 
@@ -168,6 +182,9 @@ def main() -> None:
                         help="two classes instead of one shared sfp_port class")
     parser.add_argument("--min-pixels", type=float, default=8.0,
                         help="drop boxes smaller than this on either side")
+    parser.add_argument("--drop-inconsistent", action="store_true",
+                        help="skip images where a visible port could not be labelled "
+                             "(too small or clipped), rather than labelling it as background")
     parser.add_argument("--link", action="store_true",
                         help="symlink images instead of copying them")
     args = parser.parse_args()
@@ -183,7 +200,7 @@ def main() -> None:
 
     summary = export(
         bag_dir, Path(args.output_root), args.val_every, args.per_port,
-        args.min_pixels, link=args.link,
+        args.min_pixels, link=args.link, drop_inconsistent=args.drop_inconsistent,
     )
     print(f"classes:            {summary['classes']}")
     print(f"train images:       {summary['train_images']}")
@@ -191,6 +208,7 @@ def main() -> None:
     print(f"boxes written:      {summary['boxes']}")
     print(f"images with no box: {summary['images_without_boxes']}")
     print(f"boxes dropped:      {summary['dropped_boxes']} (too small or clipped by the edge)")
+    print(f"images skipped:     {summary['inconsistent_images']} (a visible port could not be labelled)")
     print(f"data.yaml:          {Path(args.output_root) / 'data.yaml'}")
 
 
