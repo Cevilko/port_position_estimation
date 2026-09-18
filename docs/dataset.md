@@ -153,3 +153,10 @@ camera are the stray captures above.
   the axis-aligned box over-estimates slightly; this is visible and expected.
 - **No test split.** `val` is what the training run scores against. Holding
   out a genuine test set means a separate run with a different seed.
+- **The side cameras carry unvetted labels.** Acceptance -- frustum, facing
+  angle, occlusion -- is tested against `center_camera` only. `left_camera` and
+  `right_camera` are labelled by projection whether or not the port is occluded
+  or edge-on, so some of their boxes are geometrically correct and visually
+  unlearnable. Measured cost: a detector trained on this data reaches 0.997
+  recall on the centre camera and 0.888/0.843 on the sides. See
+  `docs/training.md`.

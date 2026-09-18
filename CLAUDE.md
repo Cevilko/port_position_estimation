@@ -267,10 +267,25 @@ shell):
 caller that omits it gets 640, which shrinks a 17 px port to ~9 px and the
 detector will look far worse than it is.
 
-Smoke-tested on the 60-image set: `yolo26n.pt` reaches mAP50 0.995 in 2.8
-minutes, `yolo26n-p2.yaml` 0.995 in 3.2 minutes. Those numbers are a proof that
-the chain runs, not a result — train and val are near-duplicate views of one
-fixture position.
+**A P2 model cannot be fully initialised from stock weights.** Passing
+`pretrained=yolo26s.pt` transfers only ~40% of tensors (`Transferred 360/902`)
+because the P2 branch renumbers layers. Still worth passing, but it is not
+COCO initialisation and does not compare to a `.pt`-to-matching-architecture
+load.
+
+Trained result, 2026-09-18: **mAP50 0.919, mAP50-95 0.869** in 44 minutes,
+3 ms/image inference. **`docs/training.md` has the full write-up** — the run
+itself, the log lines that look alarming and are not (AutoBatch's OOM probes,
+a permanent `val/cls_loss=nan`), one printed metric that is wrong, and why
+recall sits at 0.913. Short version of that last one: acceptance vets
+`center_camera` only, so the side cameras carry correct-but-unlearnable labels
+for occluded ports. Per-camera recall is **center 0.997**, left 0.888, right
+0.843. It is a labelling artifact, not a model weakness, and not a
+small-object problem — recall barely varies with box size.
+
+Earlier smoke tests on the 60-image set (`yolo26n.pt` 0.995 in 2.8 min,
+`yolo26n-p2.yaml` 0.995 in 3.2 min) were proof the chain runs, not results —
+train and val there were near-duplicate views of one fixture position.
 
 **How the current dataset was built, and what is wrong with it, is in
 `docs/dataset.md`** — provenance, the exact sampler flags, yield and rejection
