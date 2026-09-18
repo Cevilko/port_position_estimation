@@ -113,6 +113,26 @@ that arm pose sees those ports.
   three of those references are already dead — see `unresolved_references` in
   `docs/scene_contract.yaml`. The scene is not portable to another machine as-is.
 
+## Training a detector
+
+A **fourth** interpreter, on top of the three above: `~/.venv/bin/python` (3.12)
+is the only one with torch — `2.9.1+cu130`, whose arch list includes `sm_120`.
+That matters: the RTX 5090 is Blackwell, and an older CUDA build of torch will
+not run on it. `ultralytics` (8.4.155, which ships YOLO26) lives there too.
+`./run.sh train` uses it via `TRAIN_PYTHON`.
+
+`./run.sh train` deliberately does **not** source ROS 2 — Jazzy puts its own
+`cv2` and `numpy` on `PYTHONPATH`, which shadow the venv's and break the
+training imports. It defaults to `model=yolo26s-p2.yaml` and **`imgsz=1152`**:
+the ports are ~19 px in a 1152-wide frame, and the usual `imgsz=640` would
+shrink them to ~11 px. The P2 config adds a stride-4 detection level, which is
+where an object that small has enough grid cells to be localised.
+
+Smoke-tested on the 60-image set: `yolo26n.pt` reaches mAP50 0.995 in 2.8
+minutes, `yolo26n-p2.yaml` 0.995 in 3.2 minutes. Those numbers are a proof that
+the chain runs, not a result — train and val are near-duplicate views of one
+fixture position.
+
 ## Reading the scene without launching Isaac Sim
 
 `isaacsim/scene.usd` is binary USDC and gitignored. Its tracked, readable proxy

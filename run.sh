@@ -25,6 +25,10 @@ ISAAC_PYTHON="${ISAAC_PYTHON:-$HOME/isaacsim/python.sh}"
 # The system interpreter, which has cv2 + pytest + ROS 2. Spelled absolutely on
 # purpose: the conda python that comes first on PATH has none of them.
 SYSTEM_PYTHON="${SYSTEM_PYTHON:-/usr/bin/python3}"
+# A fourth interpreter, and the only one with torch: training needs CUDA wheels
+# that none of the other three have. Blackwell (the RTX 5090, sm_120) needs a
+# cu12.8+ build, so do not swap this for an older torch.
+TRAIN_PYTHON="${TRAIN_PYTHON:-$HOME/.venv/bin/python}"
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -69,6 +73,10 @@ Inspection and verification -- none of these need Isaac Sim:
 
   yolo [bag]         export an extracted bag as a YOLO detection dataset
                      (default: newest extraction in rosbag_samples/)
+  train [args]       train a detector on yolo_dataset/. imgsz defaults to 1152,
+                     the native width: the ports are ~19 px, and the usual 640
+                     would shrink them to ~11. Args pass through to the yolo
+                     CLI (model=, epochs=, batch=, ...).
   bbox <frame>       project the SFP port entrances into an extracted frame as
                      2D boxes; --annotate <out.jpg> draws them on the image
   contract           regenerate docs/scene_contract.yaml from isaacsim/scene.usd
@@ -132,6 +140,26 @@ extract)
 yolo)
     with_ros
     exec "$SYSTEM_PYTHON" "$REPO/scripts/export_yolo_dataset.py" "$@"
+    ;;
+
+train)
+    yolo_bin="$(dirname "$TRAIN_PYTHON")/yolo"
+    require_file "$yolo_bin" "no yolo CLI at $yolo_bin.
+       Training needs torch + ultralytics in $TRAIN_PYTHON:
+           $TRAIN_PYTHON -m pip install ultralytics
+       Override the interpreter with TRAIN_PYTHON=..."
+    require_file "$REPO/yolo_dataset/data.yaml" "no dataset -- run ./run.sh yolo first"
+    # Only supply defaults the caller has not set: the yolo CLI takes the LAST
+    # occurrence of a repeated key, so emitting both would work but reads as a
+    # contradiction in ps output and in the run's saved args.
+    defaults=()
+    [[ "$*" == *model=* ]]  || defaults+=("model=${YOLO_MODEL:-yolo26s-p2.yaml}")
+    [[ "$*" == *imgsz=* ]]  || defaults+=("imgsz=${YOLO_IMGSZ:-1152}")
+    [[ "$*" == *data=* ]]   || defaults+=("data=$REPO/yolo_dataset/data.yaml")
+    [[ "$*" == *project=* ]] || defaults+=("project=$REPO/runs")
+    # Deliberately NOT sourcing ROS: it puts its own cv2 and numpy on
+    # PYTHONPATH, which shadow the venv's and break the training imports.
+    exec "$yolo_bin" detect train "${defaults[@]}" "$@"
     ;;
 
 bbox)
