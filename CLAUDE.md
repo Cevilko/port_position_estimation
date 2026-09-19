@@ -318,6 +318,19 @@ A third: the unpacked array must be **copied**, not just made contiguous —
 `np.ascontiguousarray` returns the same read-only array when the data is
 already contiguous, and `predict()` letterboxes in place.
 
+**RViz cannot display `Detection2DArray`, so view the annotated image
+instead.** Stock RViz has no such display, and the official
+`ros-jazzy-vision-msgs-rviz-plugins` package (not installed here) only ships
+**3D** displays — `Detection3DArray`, `Detection3D`, `BoundingBox3D`,
+`BoundingBox3DArray`. There is no 2D equivalent, because a pixel-space box has
+no place in a 3D scene. `rviz/dipl.rviz` therefore carries three extra Image
+displays on `<camera>/detections_image`, which needs no plugin at all.
+`ros-jazzy-vision-msgs-layers` overlays `Detection2DArray` on an image if you
+want the real message rendered, but it is an **rqt** plugin, not an RViz one.
+To get boxes into the 3D view properly, publish `Detection3DArray`: the port
+aperture is a known 12.2 x 7.15 mm, so depth follows from the projected box
+size and the intrinsics.
+
 **Default QoS is RELIABLE, matching the scene.** `bag_recorder_node` receives
 frames with a plain depth-1 reliable subscription, so the publisher is
 reliable; a `BEST_EFFORT` subscriber would match nothing and sit silent. Pass
