@@ -416,6 +416,35 @@ one it would have to extrapolate to, which tf2 refuses to do. Ports in the same
 cycle can therefore carry different stamps when they were fitted from different
 cameras.
 
+## Scoring the estimates against the truth
+
+`./run.sh error` reads the true port poses from `/tf`, takes the estimates from
+`port_triangulator_node`, and publishes the distance per port on
+`/port_error_node/port_<n>/error` as a `std_msgs/Float64` in metres. Over a
+replayed bag it reports a median of **0.55 mm**, agreeing with the 0.43 mm
+measured offline.
+
+**The pairing is one-to-one, and that is the whole point.** Letting each port
+take its nearest estimate independently lets both score against the *same*
+estimate, which makes the reported error look better exactly when the
+estimator is doing worse: one good estimate gets counted twice and the missing
+one never gets counted. The node solves an assignment minimising total
+distance instead, so each estimate is spent once, and a port with nothing left
+to pair against is published as **unmatched** rather than borrowing its
+neighbour's. Minimising the total rather than going greedy per port also makes
+the result independent of the order the ports happen to be listed in.
+
+**Truth lookups are all-or-nothing.** If any port's transform is missing at
+that stamp, nothing is scored for that set, rather than scoring one port
+against a transform from a different instant.
+
+**Replaying a bag a second time silently stops the chain.** `ros2 bag play
+--clock` restarts sim time from the beginning, so the clock jumps *backwards*
+while the running nodes' tf2 buffers still hold data stamped in what is now the
+future. Lookups stop matching and the node keeps reporting the same frozen
+counts with no error. Restart the nodes (`./run.sh stop`, then start them
+again) whenever you restart the bag.
+
 ## Reading the scene without launching Isaac Sim
 
 `isaacsim/scene.usd` is binary USDC and gitignored. Its tracked, readable proxy

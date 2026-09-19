@@ -75,6 +75,9 @@ Pipeline, in the order you run it:
   triangulate [args] turn those per-camera detections into 3D port positions
                      with covariance, published as PoseWithCovariance. Needs
                      `detect` running (or detections from a bag).
+  error [args]       score those estimates against the true port poses in /tf,
+                     pairing each port to its own estimate one-to-one, and
+                     publish the distance per port. Needs `triangulate`.
 
 Inspection and verification -- none of these need Isaac Sim:
 
@@ -229,6 +232,16 @@ triangulate)
         "${args[@]}" "$@"
     ;;
 
+error)
+    with_ros
+    require_file "$REPO/ros_ws/install/setup.bash" "workspace not built -- run ./run.sh build first"
+    args=()
+    [[ "$*" == *use_sim_time:=* ]] || args+=("-p" "use_sim_time:=true")
+    cd "$REPO"
+    exec "$TRAIN_PYTHON" -m port_error_node.port_error_node --ros-args \
+        "${args[@]}" "$@"
+    ;;
+
 contract)
     exec "$SYSTEM_PYTHON" "$REPO/scripts/dump_scene_contract.py" "$@"
     ;;
@@ -308,6 +321,7 @@ stop)
     patterns=(
         "yolo_detector_node.yolo_detector_node"
         "port_triangulator_node.port_triangulator_node"
+        "port_error_node.port_error_node"
         "bag_recorder_node/lib/bag_recorder_node"
         "randomize_visible_joints.py"
         "rviz2 -d $REPO/rviz/dipl.rviz"
