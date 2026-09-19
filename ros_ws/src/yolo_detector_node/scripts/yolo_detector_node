@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#
+# `ros2 run` executes whatever it finds in lib/<package>/. A setuptools
+# console_scripts entry point would land here with a `#!/usr/bin/python3`
+# shebang -- the interpreter colcon built with -- and that interpreter has no
+# torch, so the node imported rclpy fine and then died on `import ultralytics`.
+#
+# This wrapper takes that slot instead and hands the module to the interpreter
+# that does have torch. Nothing else differs: the same installed module runs,
+# and it works only because ROS 2 Jazzy and the venv are both Python 3.12, so
+# rclpy's cp312 extensions import under the venv.
+#
+# Override the interpreter with TRAIN_PYTHON, the same variable run.sh uses.
+set -euo pipefail
+
+PYTHON="${TRAIN_PYTHON:-$HOME/.venv/bin/python}"
+if [[ ! -x "$PYTHON" ]]; then
+    echo "yolo_detector_node: no interpreter at $PYTHON" >&2
+    echo "  It needs torch + ultralytics. Override with TRAIN_PYTHON=..." >&2
+    exit 1
+fi
+exec "$PYTHON" -m yolo_detector_node.yolo_detector_node "$@"

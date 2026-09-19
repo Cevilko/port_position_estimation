@@ -22,6 +22,7 @@ import rclpy
 import tf2_ros
 from geometry_msgs.msg import PoseWithCovariance, PoseWithCovarianceStamped
 from message_filters import ApproximateTimeSynchronizer, Subscriber
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import CameraInfo
@@ -233,7 +234,10 @@ def main(args=None):
     node = PortTriangulatorNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
+        # SIGINT raises the first, SIGTERM the second. `./run.sh stop` sends
+        # INT and escalates to TERM, so catching only one leaves a traceback
+        # on an ordinary, requested shutdown.
         pass
     finally:
         node.destroy_node()

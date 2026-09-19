@@ -16,6 +16,7 @@ from __future__ import annotations
 import time
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from sensor_msgs.msg import Image
@@ -200,7 +201,10 @@ def main(args=None):
     node = YoloDetectorNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
+        # SIGINT raises the first, SIGTERM the second. `./run.sh stop` sends
+        # INT and escalates to TERM, so catching only one leaves a traceback
+        # on an ordinary, requested shutdown.
         pass
     finally:
         node.destroy_node()

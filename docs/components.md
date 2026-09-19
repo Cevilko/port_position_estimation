@@ -127,9 +127,12 @@ stale.
 
 # ROS 2 nodes
 
-All four live in `ros_ws/src/`. The last three **cannot be started with
-`ros2 run`**: colcon gives their console scripts a `/usr/bin/python3` shebang,
-and the detector needs torch, which only the venv has. Use `./run.sh`.
+All four live in `ros_ws/src/` and all four start with either `./run.sh <step>`
+or `ros2 run <pkg> <pkg>`. The detector is the one that needed help: a
+setuptools console script would carry a `/usr/bin/python3` shebang, and that
+interpreter has no torch, so it ships a wrapper that execs the venv
+interpreter instead. `./run.sh` additionally sets sensible defaults (weights
+path, `use_sim_time`), so it is still the easier way in.
 
 ## `bag_recorder_node` — record on demand
 `./run.sh recorder` · system Python 3.12

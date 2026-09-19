@@ -22,12 +22,9 @@ setup(
             'pytest',
         ],
     },
-    # NOTE: this console script gets a /usr/bin/python3 shebang, which has no
-    # torch, so `ros2 run yolo_detector_node yolo_detector_node` fails. Launch
-    # it with `./run.sh detect`, which uses the venv interpreter instead.
-    entry_points={
-        'console_scripts': [
-            'yolo_detector_node = yolo_detector_node.yolo_detector_node:main',
-        ],
-    },
+    # Deliberately NOT a console_scripts entry point. setuptools would give it
+    # the shebang of the interpreter colcon built with (/usr/bin/python3),
+    # which has no torch. scripts/ installs a wrapper into the same slot that
+    # execs the venv interpreter instead, so `ros2 run` works.
+    scripts=['scripts/yolo_detector_node'],
 )

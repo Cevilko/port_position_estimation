@@ -22,6 +22,7 @@ import numpy as np
 import rclpy
 import tf2_ros
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.time import Time
 from std_msgs.msg import Float64
@@ -157,7 +158,10 @@ def main(args=None):
     node = PortErrorNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
+        # SIGINT raises the first, SIGTERM the second. `./run.sh stop` sends
+        # INT and escalates to TERM, so catching only one leaves a traceback
+        # on an ordinary, requested shutdown.
         pass
     finally:
         node.destroy_node()
