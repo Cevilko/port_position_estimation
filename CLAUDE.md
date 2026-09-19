@@ -402,10 +402,19 @@ quaternion is identity and the rotation block of the covariance is set to
 `orientation_variance` (1e6) rather than a small number that would imply a
 measured rotation.
 
-**`PoseWithCovariance` carries no header**, so a bare subscriber learns neither
-the frame nor the stamp. Positions are in `world_frame` (default `world`).
-`-p publish_stamped:=true` switches to `PoseWithCovarianceStamped`, which is
-what you want for anything that has to reason about time.
+**The message is `PoseWithCovarianceStamped`**, in `world_frame` (default
+`world`). The unstamped `PoseWithCovariance` carries neither the frame the
+position is in nor the instant it describes, which is useless in a scene where
+the cameras ride a moving arm; `-p publish_stamped:=false` still gives the bare
+type if something demands it.
+
+**Each port is stamped with the newest detection that went into it** -- not the
+first camera's, and not the whole synchronised set's. Two reasons: a fused
+estimate did not exist before its last input did, and a consumer resolving TF
+at that stamp is then asking for a time the tree has already reached instead of
+one it would have to extrapolate to, which tf2 refuses to do. Ports in the same
+cycle can therefore carry different stamps when they were fitted from different
+cameras.
 
 ## Reading the scene without launching Isaac Sim
 

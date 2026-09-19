@@ -28,6 +28,7 @@ from sensor_msgs.msg import CameraInfo
 from vision_msgs.msg import Detection2DArray
 
 from .triangulation import (
+    latest_stamp,
     match_and_triangulate,
     projection_matrix,
     quaternion_to_matrix,
@@ -53,7 +54,10 @@ class PortTriangulatorNode(Node):
         self.declare_parameter("max_reprojection_error", 5.0)
         self.declare_parameter("queue_size", 10)
         self.declare_parameter("sync_slop", 0.05)
-        self.declare_parameter("publish_stamped", False)
+        # Stamped by default: a bare PoseWithCovariance carries neither the
+        # frame the position is in nor the instant it describes, which a
+        # consumer needs in order to do anything with a moving scene.
+        self.declare_parameter("publish_stamped", True)
         # A triangulated point says nothing about orientation, so the rotation
         # block is filled with this rather than a small number that would claim
         # an orientation we never estimated.
@@ -143,6 +147,9 @@ class PortTriangulatorNode(Node):
     def _on_detections(self, *messages: Detection2DArray) -> None:
         self.synced += 1
         per_camera = []
+        # Parallel to per_camera, so a port can be stamped from exactly the
+        # cameras that contributed to it rather than from the whole set.
+        stamps = []
         for camera, message in zip(self.cameras, messages):
             frame_id = message.header.frame_id
             if not frame_id:
@@ -155,6 +162,7 @@ class PortTriangulatorNode(Node):
                 for d in message.detections
             ]
             per_camera.append((projection, centres))
+            stamps.append((message.header.stamp.sec, message.header.stamp.nanosec))
 
         if len(per_camera) < self.min_views:
             return
@@ -169,13 +177,15 @@ class PortTriangulatorNode(Node):
         if not found:
             return
 
-        stamp = messages[0].header.stamp
         for index, port in enumerate(found[: self.max_ports]):
-            self.pose_publishers[index].publish(self._to_message(port, stamp))
+            seconds, nanoseconds = latest_stamp(stamps[i] for i in port["cameras"])
+            self.pose_publishers[index].publish(
+                self._to_message(port, int(seconds), int(nanoseconds))
+            )
         self.published += 1
         self.last_errors = [port["rms_error"] for port in found]
 
-    def _to_message(self, port, stamp):
+    def _to_message(self, port, seconds: int, nanoseconds: int):
         pose = PoseWithCovariance()
         position = port["position"]
         pose.pose.position.x = float(position[0])
@@ -193,7 +203,10 @@ class PortTriangulatorNode(Node):
         if not self.publish_stamped:
             return pose
         stamped = PoseWithCovarianceStamped()
-        stamped.header.stamp = stamp
+        stamped.header.stamp.sec = seconds
+        stamped.header.stamp.nanosec = nanoseconds
+        # The position is a world-frame point, and saying so is the whole
+        # reason for preferring the stamped message.
         stamped.header.frame_id = self.world_frame
         stamped.pose = pose
         return stamped

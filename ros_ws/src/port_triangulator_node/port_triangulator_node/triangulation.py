@@ -125,6 +125,22 @@ def position_covariance(projections, world_point, pixel_sigma: float) -> np.ndar
     return np.linalg.inv(information)
 
 
+def latest_stamp(stamps):
+    """The newest of several ``(sec, nanosec)`` stamps.
+
+    Lives in this module rather than the node so it can be tested without a
+    ROS graph. A fused estimate is stamped with the newest observation that
+    went into it: it did not exist before its last input did, and a consumer
+    resolving TF at that stamp is then asking for a time the tree has already
+    reached rather than one it has to extrapolate to -- which tf2 refuses to
+    do, as this project has already paid to learn.
+    """
+    stamps = list(stamps)
+    if not stamps:
+        raise ValueError("no stamps to choose from")
+    return max(stamps, key=lambda stamp: (int(stamp[0]), int(stamp[1])))
+
+
 def _combinations(detection_counts, min_views: int):
     """Every way of picking at most one detection per camera, >= min_views used."""
     options = [list(range(count)) + [None] for count in detection_counts]

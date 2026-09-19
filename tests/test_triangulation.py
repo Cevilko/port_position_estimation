@@ -307,3 +307,29 @@ def test_match_is_robust_to_pixel_noise():
     found = match_and_triangulate(per_camera, pixel_sigma=0.5, max_reprojection_error=5.0)
     assert len(found) == 1
     assert np.linalg.norm(found[0]["position"] - truth) < 0.02
+
+
+def test_latest_stamp_picks_the_newest_second():
+    from port_triangulator_node.triangulation import latest_stamp
+    assert latest_stamp([(10, 500), (12, 0), (11, 999)]) == (12, 0)
+
+
+def test_latest_stamp_breaks_ties_on_nanoseconds():
+    from port_triangulator_node.triangulation import latest_stamp
+    assert latest_stamp([(7, 100), (7, 900), (7, 500)]) == (7, 900)
+
+
+def test_latest_stamp_handles_a_single_stamp():
+    from port_triangulator_node.triangulation import latest_stamp
+    assert latest_stamp([(3, 42)]) == (3, 42)
+
+
+def test_latest_stamp_accepts_a_generator():
+    from port_triangulator_node.triangulation import latest_stamp
+    assert latest_stamp((s for s in [(1, 0), (2, 0)])) == (2, 0)
+
+
+def test_latest_stamp_rejects_an_empty_sequence():
+    from port_triangulator_node.triangulation import latest_stamp
+    with pytest.raises(ValueError, match="no stamps"):
+        latest_stamp([])
