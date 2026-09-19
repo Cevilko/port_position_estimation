@@ -72,6 +72,9 @@ Pipeline, in the order you run it:
                      vision_msgs/Detection2DArray per camera. Args pass through
                      as ROS params (model:=... conf:=... imgsz:=...).
                      Use this, NOT `ros2 run` -- see the note below.
+  triangulate [args] turn those per-camera detections into 3D port positions
+                     with covariance, published as PoseWithCovariance. Needs
+                     `detect` running (or detections from a bag).
 
 Inspection and verification -- none of these need Isaac Sim:
 
@@ -214,6 +217,18 @@ bbox)
     exec "$SYSTEM_PYTHON" "$REPO/scripts/project_port_bboxes.py" "$@"
     ;;
 
+triangulate)
+    # Same interpreter story as `detect`: run it under the venv so both nodes
+    # sit on one Python, even though this one needs no torch.
+    with_ros
+    require_file "$REPO/ros_ws/install/setup.bash" "workspace not built -- run ./run.sh build first"
+    args=()
+    [[ "$*" == *use_sim_time:=* ]] || args+=("-p" "use_sim_time:=true")
+    cd "$REPO"
+    exec "$TRAIN_PYTHON" -m port_triangulator_node.port_triangulator_node --ros-args \
+        "${args[@]}" "$@"
+    ;;
+
 contract)
     exec "$SYSTEM_PYTHON" "$REPO/scripts/dump_scene_contract.py" "$@"
     ;;
@@ -280,8 +295,19 @@ stop)
     # explicit self-PID filter is what makes this safe.
     dry_run=0
     [[ "${1:-}" == "--dry-run" ]] && dry_run=1
+    # Collect this process's whole ancestry. A parent shell's argv can contain
+    # these pattern strings verbatim (any command that edits or greps this
+    # file), so matching argv alone would list -- and then kill -- the very
+    # shell running the stop. Excluding just $$ is not enough.
+    ancestors=" "
+    walk=$$
+    while [[ -n "$walk" && "$walk" != "0" && "$walk" != "1" ]]; do
+        ancestors+="$walk "
+        walk=$(ps -o ppid= -p "$walk" 2>/dev/null | tr -d ' ')
+    done
     patterns=(
         "yolo_detector_node.yolo_detector_node"
+        "port_triangulator_node.port_triangulator_node"
         "bag_recorder_node/lib/bag_recorder_node"
         "randomize_visible_joints.py"
         "rviz2 -d $REPO/rviz/dipl.rviz"
@@ -289,7 +315,8 @@ stop)
     found=0
     for pattern in "${patterns[@]}"; do
         while read -r pid rest; do
-            [[ -z "$pid" || "$pid" == "$$" ]] && continue
+            [[ -z "$pid" ]] && continue
+            [[ "$ancestors" == *" $pid "* ]] && continue
             found=$((found + 1))
             if [[ $dry_run -eq 1 ]]; then
                 echo "would stop $pid  ${rest:0:70}"
@@ -309,8 +336,11 @@ stop)
     for _ in $(seq 1 10); do
         remaining=0
         for pattern in "${patterns[@]}"; do
-            count=$(ps -eo pid,args --no-headers | grep -F -- "$pattern" | grep -vc grep || true)
-            remaining=$((remaining + count))
+            while read -r pid _; do
+                [[ -z "$pid" ]] && continue
+                [[ "$ancestors" == *" $pid "* ]] && continue
+                remaining=$((remaining + 1))
+            done < <(ps -eo pid,args --no-headers | grep -F -- "$pattern" | grep -v grep)
         done
         [[ $remaining -eq 0 ]] && { echo "all stopped"; exit 0; }
         sleep 1
@@ -318,7 +348,8 @@ stop)
     echo "still running after SIGINT, sending TERM:"
     for pattern in "${patterns[@]}"; do
         while read -r pid rest; do
-            [[ -z "$pid" || "$pid" == "$$" ]] && continue
+            [[ -z "$pid" ]] && continue
+            [[ "$ancestors" == *" $pid "* ]] && continue
             echo "  TERM $pid"
             kill -TERM "$pid" 2>/dev/null || true
         done < <(ps -eo pid,args --no-headers | grep -F -- "$pattern" | grep -v grep)

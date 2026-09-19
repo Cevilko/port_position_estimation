@@ -358,6 +358,55 @@ reliable; a `BEST_EFFORT` subscriber would match nothing and sit silent. Pass
 every 10 s while it has received no images, which is what that failure looks
 like from the outside.
 
+## Triangulating the ports in 3D
+
+`./run.sh triangulate` turns the per-camera detections into world-frame
+positions with covariance, one `geometry_msgs/PoseWithCovariance` per port on
+`/port_triangulator_node/port_<n>/pose`. It needs `./run.sh detect` running.
+
+Measured over the 991-frame bag, detections straight from `best.pt`:
+
+| | |
+|---|---|
+| ports localised | 1809 of 1982 (91%) |
+| position error | **median 0.43 mm**, mean 0.92, p90 1.47, max 40.7 |
+| reprojection residual | median 0.11 px |
+| views used | 3-view 1244, 2-view 565 |
+
+**The correspondence problem is the hard part, not the triangulation.** The
+detector emits an unlabelled `sfp_port` per box, so nothing says which box in
+one camera is which port in another. The node enumerates every assignment of
+at most one detection per camera, triangulates each, scores it by reprojection
+error, and greedily keeps the cheapest non-conflicting ones — preferring a
+3-view fit over a lower-error 2-view one, because two views can always be made
+to fit. Each detection is consumed once, so two ports cannot collapse onto one.
+
+**Port ids are positional, not semantic.** Accepted points are sorted by
+coordinate, so `port_0` and `port_1` swap if the fixture yaws far enough.
+They are not tied to `sfp_port_0_entrance` / `sfp_port_1_entrance`.
+
+**`pixel_sigma` is the covariance's only real knob, and the default is
+deliberately pessimistic.** Covariance scales with its square. The default 1.5
+px yields a median predicted sigma of (1.27, 2.63, 4.34) mm against a median
+actual error of 0.43 mm — a median Mahalanobis distance of **0.18** where a
+calibrated 3-dof estimate would sit near 1.5. In other words the node reports
+roughly 8x more uncertainty than it has. Calibrating it means
+`-p pixel_sigma:=0.2`, which the measured 0.11 px residual supports (corrected
+for the fit's degrees of freedom, true noise is ~0.16-0.22 px). The default
+stays conservative because these numbers come from a noise-free renderer and
+an in-distribution detector; on real hardware they will not hold, and
+over-stating confidence is the worse failure.
+
+**Orientation is not estimated.** A triangulated point has none, so the
+quaternion is identity and the rotation block of the covariance is set to
+`orientation_variance` (1e6) rather than a small number that would imply a
+measured rotation.
+
+**`PoseWithCovariance` carries no header**, so a bare subscriber learns neither
+the frame nor the stamp. Positions are in `world_frame` (default `world`).
+`-p publish_stamped:=true` switches to `PoseWithCovarianceStamped`, which is
+what you want for anything that has to reason about time.
+
 ## Reading the scene without launching Isaac Sim
 
 `isaacsim/scene.usd` is binary USDC and gitignored. Its tracked, readable proxy
