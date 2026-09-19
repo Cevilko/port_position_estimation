@@ -277,8 +277,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    if args.samples < 1:
-        raise SystemExit("--samples must be at least 1")
+    if args.samples < 0:
+        raise SystemExit("--samples must be 0 or more")
+    # --samples 0 means "open the scene, play it, and change nothing": the ROS
+    # publishers tick so a detector or RViz has live topics, but nothing is
+    # randomized, no controller is disabled and no recording is triggered.
+    just_run = args.samples == 0
     if args.max_attempts < 1:
         raise SystemExit("--max-attempts must be at least 1")
     if bool(args.joint_low) != bool(args.joint_high):
@@ -339,10 +343,13 @@ def main() -> int:
         clock_path = _ensure_clock_publisher(stage, og, graph_path)
         print(f"clock:  {clock_path or 'NOT PUBLISHED (recorder will use wall time)'}")
         record_gate = _setup_record_gate(stage, og, client_prim.GetPath().pathString)
-        # The client node's first compute only initialises it, so spend that
-        # no-op pulse here instead of losing the first accepted pose's recording.
-        _pulse_record_gate(app, record_gate)
-        _pump(app, 10)
+        if not just_run:
+            # The client node's first compute only initialises it, so spend that
+            # no-op pulse here instead of losing the first accepted pose's
+            # recording. Skipped when only running the scene -- that pulse can
+            # produce a real capture, and here nobody asked for one.
+            _pulse_record_gate(app, record_gate)
+            _pump(app, 10)
 
     articulation = Articulation(articulation_prim.GetPath().pathString)
     articulation.initialize()
@@ -358,12 +365,14 @@ def main() -> int:
     # Only now: the nominal is read from the live pose, and until this point the
     # scene's controller is what holds the arm there. Disabling it earlier would
     # let the arm sag first and centre every sample on the sag instead.
-    if not args.keep_position_controller:
+    # Leave the scene's own controller alone when only running it: disabling it
+    # is a sampling measure, and without it the arm just sags.
+    if not args.keep_position_controller and not just_run:
         stopped = _disable_competing_controllers(stage, og)
         print(f"controller: disabled {stopped or 'none found'}")
 
     probe = None
-    if not args.no_occlusion_check:
+    if not args.no_occlusion_check and not just_run:
         import omni.replicator.core as rep
 
         height = max(1, int(round(args.probe_width * 1024 / 1152)))
@@ -377,7 +386,7 @@ def main() -> int:
     rng = np.random.default_rng(args.seed)
 
     fixture = None
-    if not args.no_randomize_ports:
+    if not args.no_randomize_ports and not just_run:
         fixture = _RigidFixture(
             XFormPrim, np, args.port_group_prims, args.port_pivot_prim
         )
@@ -390,9 +399,12 @@ def main() -> int:
             + f"+/-{args.port_yaw_span:.3f} rad"
         )
 
-    print("nominal: " + _format_joint_vector(nominal))
-    print("low:     " + _format_joint_vector(low))
-    print("high:    " + _format_joint_vector(high))
+    if just_run:
+        print("mode:    running the scene only, no randomization")
+    else:
+        print("nominal: " + _format_joint_vector(nominal))
+        print("low:     " + _format_joint_vector(low))
+        print("high:    " + _format_joint_vector(high))
 
     accepted = 0
     last_accepted = None
@@ -453,10 +465,11 @@ def main() -> int:
                 "setting --nominal near a known good pose, or increasing --max-attempts."
             )
 
-    summary = ", ".join(
-        f"{reason or 'accepted'}={count}" for reason, count in sorted(rejections.items())
-    )
-    print(f"attempts: {summary}")
+    if not just_run:
+        summary = ", ".join(
+            f"{reason or 'accepted'}={count}" for reason, count in sorted(rejections.items())
+        )
+        print(f"attempts: {summary}")
 
     if args.save:
         save_path = str(Path(args.save).expanduser().resolve())
@@ -466,7 +479,9 @@ def main() -> int:
         else:
             raise RuntimeError(f"Failed to save stage: {save_path}")
 
-    if args.leave_running:
+    # Running the scene only is pointless if the process then exits, so that
+    # mode keeps the app alive whether or not --leave-running was passed.
+    if args.leave_running or just_run:
         print("running; close the window or press Ctrl-C to stop")
         while app.is_running():
             app.update()

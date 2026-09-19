@@ -331,6 +331,26 @@ To get boxes into the 3D view properly, publish `Detection3DArray`: the port
 aperture is a known 12.2 x 7.15 mm, so depth follows from the projected box
 size and the intrinsics.
 
+**Nothing started in the background stops by itself.** The detector, the
+recorder, the sampler and RViz are all launched detached: they survive the
+terminal that started them, get reparented to init, and keep their resources
+until killed. The detector is the expensive one -- it holds **~1 GB of VRAM**
+and runs inference on every frame for as long as something publishes.
+`./run.sh stop` ends them (SIGINT first, so rclpy shuts down cleanly and
+rosbag2 still writes `metadata.yaml`, then TERM for anything that ignored it);
+`./run.sh stop --dry-run` lists them without killing anything. It matches on
+full command lines through `ps`, never `pgrep -f`, for the self-match reason
+above.
+
+**`use_sim_time` must match who opened the scene.** `./run.sh detect` defaults
+it to true, which is right when the sampler is driving -- the sampler adds a
+`ROS2PublishClock` node at runtime. **The saved scene publishes no `/clock`**,
+so an Isaac Sim opened by hand needs
+`./run.sh detect -p use_sim_time:=false`. Get this wrong and the node still
+detects, because callbacks use the message's own header stamp, but its clock
+never advances, so its timers never fire: no throughput reports and, worse, no
+"not receiving images" warning when something really is broken.
+
 **Default QoS is RELIABLE, matching the scene.** `bag_recorder_node` receives
 frames with a plain depth-1 reliable subscription, so the publisher is
 reliable; a `BEST_EFFORT` subscriber would match nothing and sit silent. Pass

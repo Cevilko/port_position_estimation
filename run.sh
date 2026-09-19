@@ -93,6 +93,9 @@ Inspection and verification -- none of these need Isaac Sim:
   topics             list the ROS 2 topics currently live
   check              test + contract, and report if the contract is stale.
                      This is the "did I break anything" command.
+  stop               stop this project's long-running processes (detector,
+                     recorder, sampler, rviz). They are started detached and
+                     do not exit on their own. --dry-run just lists them.
   rviz               open RViz with the project layout
 
 Environment overrides: ROS_SETUP, ISAAC_PYTHON, SYSTEM_PYTHON.
@@ -159,9 +162,15 @@ detect)
        Train first with ./run.sh train, or point YOLO_WEIGHTS at a .pt file."
     args=()
     [[ "$*" == *model:=* ]] || args+=("-p" "model:=$model")
+    # use_sim_time only makes sense when something publishes /clock. The sampler
+    # adds a ROS2PublishClock node at runtime, but the saved scene has none, so
+    # an Isaac Sim opened by hand publishes no /clock -- and with use_sim_time
+    # true and no /clock the node's clock never advances and its timers never
+    # fire. Default to true (the sampler case) but let the caller say otherwise.
+    [[ "$*" == *use_sim_time:=* ]] || args+=("-p" "use_sim_time:=true")
     cd "$REPO"
     exec "$TRAIN_PYTHON" -m yolo_detector_node.yolo_detector_node --ros-args \
-        -p use_sim_time:=true "${args[@]}" "$@"
+        "${args[@]}" "$@"
     ;;
 
 yolo)
@@ -257,6 +266,63 @@ check)
 rviz)
     with_ros
     exec rviz2 -d "$REPO/rviz/dipl.rviz"
+    ;;
+
+stop)
+    # Everything this script starts in the background is detached, survives the
+    # terminal that launched it, and holds resources until killed -- the
+    # detector alone sits on ~1 GB of VRAM while it idles. This is the off
+    # switch.
+    #
+    # Matching is on full command lines via `ps`, NOT `pgrep -f`: pgrep -f
+    # matches the shell running the pattern itself, so it reports phantom
+    # processes and pkill -f kills its own caller. `grep -v grep` plus an
+    # explicit self-PID filter is what makes this safe.
+    dry_run=0
+    [[ "${1:-}" == "--dry-run" ]] && dry_run=1
+    patterns=(
+        "yolo_detector_node.yolo_detector_node"
+        "bag_recorder_node/lib/bag_recorder_node"
+        "randomize_visible_joints.py"
+        "rviz2 -d $REPO/rviz/dipl.rviz"
+    )
+    found=0
+    for pattern in "${patterns[@]}"; do
+        while read -r pid rest; do
+            [[ -z "$pid" || "$pid" == "$$" ]] && continue
+            found=$((found + 1))
+            if [[ $dry_run -eq 1 ]]; then
+                echo "would stop $pid  ${rest:0:70}"
+            else
+                echo "stopping $pid  ${rest:0:70}"
+                kill -INT "$pid" 2>/dev/null || true
+            fi
+        done < <(ps -eo pid,args --no-headers | grep -F -- "$pattern" | grep -v grep)
+    done
+    if [[ $found -eq 0 ]]; then
+        echo "nothing running"
+        exit 0
+    fi
+    [[ $dry_run -eq 1 ]] && exit 0
+    # SIGINT lets rclpy shut down cleanly and rosbag2 write metadata.yaml. Give
+    # it a few seconds, then escalate only for whatever ignored it.
+    for _ in $(seq 1 10); do
+        remaining=0
+        for pattern in "${patterns[@]}"; do
+            count=$(ps -eo pid,args --no-headers | grep -F -- "$pattern" | grep -vc grep || true)
+            remaining=$((remaining + count))
+        done
+        [[ $remaining -eq 0 ]] && { echo "all stopped"; exit 0; }
+        sleep 1
+    done
+    echo "still running after SIGINT, sending TERM:"
+    for pattern in "${patterns[@]}"; do
+        while read -r pid rest; do
+            [[ -z "$pid" || "$pid" == "$$" ]] && continue
+            echo "  TERM $pid"
+            kill -TERM "$pid" 2>/dev/null || true
+        done < <(ps -eo pid,args --no-headers | grep -F -- "$pattern" | grep -v grep)
+    done
     ;;
 
 ""|-h|--help|help)
