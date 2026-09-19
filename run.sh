@@ -64,7 +64,7 @@ Pipeline, in the order you run it:
   sample [args]      launch Isaac Sim, randomize arm poses with both SFP port
                      entrances kept in view, and trigger a recording per
                      accepted pose. Args pass through to
-                     isaacsim/randomize_visible_joints.py
+                     scripts/randomize_visible_joints.py
                      (e.g. ./run.sh sample --samples 20 --seed 0 --headless)
   extract [bag]      pull sample frames + TF + CameraInfo out of a recorded bag
                      into rosbag_samples/ (default: rosbags/rosbag_0)
@@ -146,7 +146,7 @@ sample)
     # resolves librmw at extension load. Source it and the bridge comes up with
     # no topics and no error worth reading.
     with_ros
-    exec "$ISAAC_PYTHON" "$REPO/isaacsim/randomize_visible_joints.py" "$@"
+    exec "$ISAAC_PYTHON" "$REPO/scripts/randomize_visible_joints.py" "$@"
     ;;
 
 extract)

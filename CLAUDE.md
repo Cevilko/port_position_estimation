@@ -25,7 +25,7 @@ repo still claim. The 5.1 install is the unsuffixed `~/isaacsim`.
 
 | Interpreter | Version | Has | Use for |
 |---|---|---|---|
-| `~/isaacsim/python.sh` | 3.11 | Isaac Sim, `omni.*`, `pxr` **only after Kit boots** | `isaacsim/randomize_visible_joints.py` |
+| `~/isaacsim/python.sh` | 3.11 | Isaac Sim, `omni.*`, `pxr` **only after Kit boots** | `scripts/randomize_visible_joints.py` |
 | `/usr/bin/python3` | 3.12 | `cv2`, `pytest`, ROS 2 Jazzy | the extractor, the tests |
 | `~/miniconda3/bin/python3` | 3.13 | none of the above | **nothing here** — it is first on `PATH`, so it is what you get if you type `python3` without thinking |
 

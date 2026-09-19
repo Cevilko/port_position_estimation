@@ -3,7 +3,10 @@
 
 Run this with Isaac Sim's Python, not the system Python, for example:
 
-    ~/isaacsim-5.1.0/python.sh isaacsim/randomize_visible_joints.py --samples 20
+    ./run.sh sample --samples 20
+
+which uses Isaac Sim 5.1's interpreter at ``~/isaacsim/python.sh``. There is no
+``~/isaacsim-5.1.0``; the 5.1 install is the unsuffixed directory.
 
 The script opens ``isaacsim/scene.usd``, finds the ``aic_unified_robot`` arm,
 ``center_camera``, and the two SFP entrance Xforms, then rejection-samples joint
@@ -83,7 +86,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--stage",
-        default=str(Path(__file__).resolve().parent / "scene.usd"),
+        # The scene stays in isaacsim/ while this script lives in scripts/,
+        # so resolve it relative to the repo root rather than to this file's
+        # own directory.
+        default=str(Path(__file__).resolve().parent.parent / "isaacsim" / "scene.usd"),
         help="USD stage to open; defaults to isaacsim/scene.usd",
     )
     parser.add_argument("--headless", action="store_true", help="run without a GUI")

@@ -60,7 +60,7 @@ edges.
 isaacsim/scene.usd                    UR5e + 3 cameras + ROS 2 OmniGraph
         │                             (binary; see docs/scene_contract.yaml)
         │
-isaacsim/randomize_visible_joints.py  rejection-samples arm and fixture poses
+scripts/randomize_visible_joints.py   rejection-samples arm and fixture poses
         │                             until both SFP entrances are visible to
         │                             the centre camera -- in frustum, facing
         │                             it, unoccluded -- then fires the scene's
@@ -101,7 +101,8 @@ Python 3.12 `rclpy` — see CLAUDE.md.
 |---|---|
 | `run.sh` | every pipeline step; handles sourcing and interpreter choice |
 | `CLAUDE.md` | versions, interpreters, startup order, known sharp edges |
-| `isaacsim/` | the USD scene and the pose sampler that drives it |
+| `isaacsim/` | the USD scene (binary, gitignored) |
+| `scripts/randomize_visible_joints.py` | the pose sampler that drives the scene |
 | `ros_ws/src/bag_recorder_node/` | the `/record_rosbag` Trigger service |
 | `ros_ws/src/yolo_detector_node/` | runs the detector on live camera topics |
 | `ros_ws/src/port_triangulator_node/` | multi-view detections → 3D pose + covariance |

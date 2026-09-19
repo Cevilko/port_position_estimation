@@ -43,7 +43,7 @@ The first half builds a dataset; the second half consumes the model it trains.
 
 # Scripts
 
-## `isaacsim/randomize_visible_joints.py` — the sampler
+## `scripts/randomize_visible_joints.py` — the sampler
 `./run.sh sample [args]` · Isaac Sim's Python 3.11
 
 Opens the scene, randomises the arm pose and the NIC-card fixture, and keeps
