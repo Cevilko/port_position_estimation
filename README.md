@@ -84,8 +84,12 @@ yolo_detector_node -> port_triangulator_node -> port_error_node
                                       live detection, triangulation, scoring
 ```
 
-**[docs/components.md](docs/components.md) describes every script and node** —
-what each consumes, produces, and gets wrong if you hold it incorrectly.
+Two documents cover this in depth:
+**[docs/pipeline.md](docs/pipeline.md)** walks the whole flow stage by stage —
+what each stage receives, the maths it applies, what it emits and how to check
+it. **[docs/components.md](docs/components.md)** is the per-component reference:
+what each script and node consumes, produces, and gets wrong if you hold it
+incorrectly.
 
 The trigger goes through an OmniGraph node inside the USD stage rather than
 from Python because Isaac Sim's bundled Python 3.11 cannot host Jazzy's
