@@ -445,6 +445,11 @@ future. Lookups stop matching and the node keeps reporting the same frozen
 counts with no error. Restart the nodes (`./run.sh stop`, then start them
 again) whenever you restart the bag.
 
+**`docs/pipeline.md` walks the whole flow in detail** — sampling, recording,
+extraction, projected labels, dataset export, training, live detection,
+triangulation and validation, with the conventions and the maths that connect
+them. Read it before changing any stage's contract with the next.
+
 ## Reading the scene without launching Isaac Sim
 
 `isaacsim/scene.usd` is binary USDC and gitignored. Its tracked, readable proxy

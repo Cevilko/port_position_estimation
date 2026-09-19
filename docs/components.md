@@ -3,7 +3,8 @@
 A reference for the moving parts of this repo: each one's job, what it consumes
 and produces, how to run it, and the thing about it that is not obvious. For
 *why* the environment is the way it is (versions, interpreters, startup order)
-read `CLAUDE.md` first; for the dataset and the trained model see
+read `CLAUDE.md` first; for how the stages fit together and the maths between
+them, `docs/pipeline.md`; for the dataset and the trained model,
 `docs/dataset.md` and `docs/training.md`.
 
 Everything is launched through `./run.sh <step>`, which picks the right
