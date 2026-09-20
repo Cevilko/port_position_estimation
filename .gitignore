@@ -40,3 +40,6 @@ yolo_dataset/
 runs/
 weights/
 *.pt
+
+# Generated figure/CSV delivery, rebuilt by scripts/export_evaluation_csv.py
+figure-delivery/
