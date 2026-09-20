@@ -516,6 +516,8 @@ change can be checked cheaply.
 - Don't commit binaries. `*.usd`, `*.usda`, `*.mcap` and `rosbags/` are ignored
   on purpose; `git-lfs` is installed if you decide otherwise.
 - `docs/scene_contract.yaml` is generated. Never hand-edit it.
-- Keep `rosbag_samples/` paths repo-relative — they are committed, so an
-  absolute `/home/...` in them is wrong the moment the repo moves. There is a
-  test for this.
+- Keep `rosbag_samples/` paths repo-relative. The manifests are read on other
+  machines and quoted in write-ups, so an absolute `/home/...` in them is wrong
+  the moment anything moves. There is a test for this. (The directory itself is
+  now gitignored — a full run is ~324 MB, where the original committed samples
+  were two small example frames.)

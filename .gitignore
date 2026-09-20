@@ -43,3 +43,9 @@ weights/
 
 # Generated figure/CSV delivery, rebuilt by scripts/export_evaluation_csv.py
 figure-delivery/
+
+# Extracted samples. These were committed when they were a couple of small
+# example frames; a 991-frame run is 324 MB, so they are generated artifacts
+# now. Regenerate with ./run.sh extract.
+rosbag_samples/
+yolo_dataset_old_*/

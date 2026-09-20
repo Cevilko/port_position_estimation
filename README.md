@@ -117,7 +117,7 @@ Python 3.12 `rclpy` — see CLAUDE.md.
 | `tests/` | pytest for every pure function in the pipeline |
 | `rviz/dipl.rviz` | RViz layout for the three camera streams |
 | `rosbags/` | recorded bags (gitignored — large) |
-| `rosbag_samples/` | extracted samples (committed — small, and the provenance record) |
+| `rosbag_samples/` | extracted samples (gitignored — a full run is ~324 MB) |
 
 ## Published topics
 
