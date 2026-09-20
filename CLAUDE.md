@@ -83,6 +83,15 @@ settle. The sampler now disables every `IsaacArticulationController` node after
 reading the nominal pose from it (order matters: disable first and the arm sags,
 and every sample centres on the sag). `--keep-position-controller` opts out.
 
+**The cable's visuals are disabled in the scene, and the contract cannot tell
+you that.** The fibre cable on the plug in the gripper is not drawn, and was not
+for the 1000-episode dataset run or anything trained on it.
+`docs/scene_contract.yaml` records cameras, topics, joints and port frames but
+**not prim visibility**, and the USD is binary and gitignored, so no tracked
+artifact reveals this -- it has to be carried as knowledge. It matters because
+the occlusion test below reads rendered depth, and an invisible prim writes
+none: acceptance never rejects a pose the cable would have blocked.
+
 **Occlusion is tested against the rendered depth, not physics.** A physics
 raycast would be useless: the whole scene has 11 colliders, none on the gripper
 and none on the card, so a ray hits nothing. The sampler instead attaches a

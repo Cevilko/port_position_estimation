@@ -147,6 +147,14 @@ camera are the stray captures above.
   entirely from the randomization ranges in the table above. Nothing varies
   lighting, materials, background or camera intrinsics, so a detector trained
   here has seen one room, one card and one robot.
+- **The cable's visuals were disabled in the scene, for every run.** The fibre
+  cable on the SFP plug in the gripper is not drawn in any frame of this
+  dataset. Labels are unaffected -- they never read the pixels -- but the
+  occlusion test measures rendered depth, and an invisible prim writes none, so
+  the 289 "occluded" rejections cover the gripper and card only. Acceptance is
+  more permissive than the physical setup, and the detector has never seen a
+  cable. Note that `docs/scene_contract.yaml` does **not** record prim
+  visibility, so nothing in the repo reveals this.
 - **The labels are projections, not annotations.** They are geometrically
   exact to ~0.7 px given correct transforms, but they encode the *modelled*
   aperture (12.2 x 7.15 mm), not what a human would draw. As a port turns away
