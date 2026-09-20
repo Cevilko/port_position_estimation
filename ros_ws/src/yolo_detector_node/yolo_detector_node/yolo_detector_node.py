@@ -13,7 +13,9 @@ rclpy and ultralytics can share one process at all.
 
 from __future__ import annotations
 
+import os
 import time
+from pathlib import Path
 
 import rclpy
 from rclpy.executors import ExternalShutdownException
@@ -32,12 +34,76 @@ from .image_convert import image_to_bgr, bgr_to_image_fields
 
 DEFAULT_CAMERAS = ["/center_camera", "/left_camera", "/right_camera"]
 
+#: Where the trained detector lands, relative to the repository root.
+DEFAULT_WEIGHTS_RELATIVE = Path("runs/sfp_yolo26s_p2/weights/best.pt")
+
+
+def find_repository_root():
+    """Walk up from this file looking for the repo, or None.
+
+    With ``--symlink-install`` (what ``./run.sh build`` uses) the installed
+    module is a symlink back into ``ros_ws/src/``, so ``__file__`` resolves into
+    the source tree and the walk finds the checkout. A non-symlink install has
+    no path back, and callers fall through to the other candidates.
+    """
+    for directory in Path(__file__).resolve().parents:
+        if (directory / "run.sh").is_file() and (directory / "ros_ws").is_dir():
+            return directory
+    return None
+
+
+def default_weights() -> Path:
+    """The default for the ``model`` parameter, always an absolute path.
+
+    This used to be the *relative* ``runs/...`` path, which only worked because
+    ``./run.sh detect`` cd's to the repository first. Under ``ros2 run`` the
+    node inherits the caller's working directory, so the same default resolved
+    to nothing and the load failed with a bare FileNotFoundError.
+
+    ``YOLO_WEIGHTS`` wins if set, so a different checkout or a shared model
+    needs no argument. Otherwise the path is anchored to the repository this
+    file lives in, which makes the default independent of where it is called
+    from.
+    """
+    override = os.environ.get("YOLO_WEIGHTS")
+    if override:
+        return Path(override).expanduser().resolve()
+    repository = find_repository_root()
+    if repository is not None:
+        return repository / DEFAULT_WEIGHTS_RELATIVE
+    # No path back to the checkout (a non-symlink install). Fall back to the
+    # working directory so the value is still absolute and still says plainly
+    # what was looked for.
+    return (Path.cwd() / DEFAULT_WEIGHTS_RELATIVE).resolve()
+
+
+def resolve_weights(parameter_value: str) -> Path:
+    """Make the ``model`` parameter absolute and check it exists.
+
+    A relative value is resolved against the working directory, which is what a
+    caller passing one would expect.
+    """
+    path = Path(parameter_value).expanduser()
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    if path.is_file():
+        return path
+    raise FileNotFoundError(
+        f"no detector weights at {path}\n"
+        "Train a model with './run.sh train', or point the node at one:\n"
+        "  ros2 run yolo_detector_node yolo_detector_node --ros-args"
+        " -p model:=/abs/path/to/best.pt\n"
+        "  (or set YOLO_WEIGHTS=/abs/path/to/best.pt)"
+    )
+
 
 class YoloDetectorNode(Node):
     def __init__(self):
         super().__init__("yolo_detector_node")
 
-        self.declare_parameter("model", "runs/sfp_yolo26s_p2/weights/best.pt")
+        # An absolute path, anchored to this checkout, so the node works from
+        # any working directory -- `ros2 run` does not cd anywhere.
+        self.declare_parameter("model", str(default_weights()))
         # 1152 is not a detail. The model was trained at the camera's native
         # width and the ports are ~17 px there; the ultralytics default of 640
         # would shrink them to ~9 px and the detector would look far worse than
@@ -58,12 +124,12 @@ class YoloDetectorNode(Node):
         self.imgsz = int(self.get_parameter("imgsz").value)
         self.conf = float(self.get_parameter("conf").value)
         self.iou = float(self.get_parameter("iou").value)
-        model_path = str(self.get_parameter("model").value)
+        model_path = resolve_weights(str(self.get_parameter("model").value))
 
         from ultralytics import YOLO  # imported late so --help style runs stay fast
 
         self.get_logger().info(f"loading {model_path}")
-        self.model = YOLO(model_path)
+        self.model = YOLO(str(model_path))
         device = str(self.get_parameter("device").value)
         if device:
             self.model.to(device)
