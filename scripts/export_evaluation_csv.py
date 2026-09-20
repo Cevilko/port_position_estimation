@@ -65,6 +65,34 @@ def pose_of(document):
     )
 
 
+def greedy_pairs(costs: np.ndarray):
+    """Each estimate takes its nearest truth; a taken truth means the estimate
+    is dropped.
+
+    Kept only so earlier figures can be reproduced exactly. It is **biased**:
+    two estimates landing nearest the same truth is a symptom of a bad
+    triangulation, and this rule responds by discarding one of them, which
+    removes hard cases from the error distribution while also lowering the
+    count of ports localised. Prefer ``optimal``.
+    """
+    pairs, taken = [], set()
+    for estimate_index in range(costs.shape[1]):
+        truth_index = int(np.argmin(costs[:, estimate_index]))
+        if truth_index in taken:
+            continue
+        taken.add(truth_index)
+        pairs.append((truth_index, estimate_index))
+    return pairs
+
+
+def pair_truths(costs: np.ndarray, pairing: str):
+    if pairing == "optimal":
+        return optimal_assignment(costs)
+    if pairing == "greedy":
+        return greedy_pairs(costs)
+    raise ValueError(f"unknown pairing {pairing!r}")
+
+
 def mahalanobis(delta: np.ndarray, covariance: np.ndarray) -> float | None:
     """sqrt(d' S^-1 d), or None if the covariance is not invertible."""
     try:
@@ -84,7 +112,8 @@ def intrinsics_for(bag_dir: Path):
 
 
 def export(bag_dir: Path, weights: Path, output_dir: Path, pixel_sigma: float,
-           max_reprojection_error: float, conf: float, imgsz: int):
+           max_reprojection_error: float, conf: float, imgsz: int,
+           pairing: str = "optimal"):
     from ultralytics import YOLO
 
     bag_dir = Path(bag_dir)
@@ -149,7 +178,7 @@ def export(bag_dir: Path, weights: Path, output_dir: Path, pixel_sigma: float,
         # partner is dropped, never scored against its neighbour's estimate.
         estimates = [port["position"] for port in found]
         costs = distance_matrix(truths, estimates)
-        for truth_index, estimate_index in optimal_assignment(costs):
+        for truth_index, estimate_index in pair_truths(costs, pairing):
             port = found[estimate_index]
             delta = port["position"] - truths[truth_index]
             position_rows.append({
@@ -188,11 +217,16 @@ def main() -> None:
     parser.add_argument("--max-reprojection-error", type=float, default=5.0)
     parser.add_argument("--conf", type=float, default=0.25)
     parser.add_argument("--imgsz", type=int, default=1152)
+    parser.add_argument("--pairing", choices=("optimal", "greedy"), default="optimal",
+                        help="how truths are paired to estimates. 'optimal' is one-to-one "
+                             "minimum-total, which is what port_error_node does. 'greedy' "
+                             "reproduces earlier figures and is biased -- see greedy_pairs.")
     args = parser.parse_args()
 
     positions, residuals, frames, unsolved = export(
         Path(args.bag), Path(args.weights), Path(args.output_dir),
         args.pixel_sigma, args.max_reprojection_error, args.conf, args.imgsz,
+        args.pairing,
     )
 
     errors = np.array([r["error_m"] for r in positions])
@@ -200,6 +234,7 @@ def main() -> None:
     residual_values = np.array([r["rms_error_px"] for r in residuals])
     mahal = np.array([r["mahalanobis"] for r in positions if r["mahalanobis"] != ""])
 
+    print(f"pairing                : {args.pairing}")
     print(f"frames                 : {frames} ({unsolved} with no solution)")
     print(f"position-errors.csv    : {len(positions)} rows")
     print(f"reprojection-residuals : {len(residuals)} rows")
