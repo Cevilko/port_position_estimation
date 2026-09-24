@@ -1,111 +1,113 @@
-# Port position estimation
+# Procena pozicije SFP portova
 
-Estimates the 3D position of SFP fibre-optic ports from three robot-mounted
-cameras, in simulation. A UR5e in Isaac Sim is posed at random in front of a NIC
-card; every accepted pose is recorded, automatically labelled from the transform
-tree, and used to train a YOLO26 detector. At run time the detector's boxes from
-three cameras are triangulated into world-frame positions with covariance, and
-scored against ground truth.
+Procena 3D pozicije SFP optičkih portova pomoću tri kamere montirane na robotu,
+u simulaciji. UR5e robot u Isaac Sim-u se nasumično postavlja ispred mrežne
+kartice; svaka prihvaćena poza se snima, automatski se označava na osnovu stabla
+transformacija, i koristi se za treniranje YOLO26 detektora. U radu se detekcije
+iz tri kamere triangulišu u pozicije u svetskom koordinatnom sistemu, zajedno sa
+kovarijansom, i porede se sa stvarnim vrednostima.
 
-**Measured end to end: median 0.43 mm position error**, detector mAP50 0.919,
-~6 ms/frame inference. See [docs/training.md](docs/training.md) and
-[docs/dataset.md](docs/dataset.md) for how those were obtained and what they do
-and do not mean.
+**Izmereno na celom lancu: medijana greške pozicije 0,43 mm**, mAP50 detektora
+0,919, oko 6 ms po frejmu. Videti [docs/training.md](docs/training.md) i
+[docs/dataset.md](docs/dataset.md) za način na koji su dobijeni ti brojevi i šta
+oni jesu, a šta nisu.
 
-The task comes from Intrinsic's
+Zadatak potiče sa Intrinsic-ovog takmičenja
 [AI for Industry Challenge](https://www.intrinsic.ai/events/ai-for-industry-challenge).
 
 ---
 
-## What you get, and what you do not
-
-**Included in this repository:**
+## Šta repozitorijum sadrži
 
 | | |
 |---|---|
-| All source: sampler, recorder, extractor, labeller, exporter, 4 ROS 2 nodes | |
-| **The trained detector** | `runs/sfp_yolo26s_p2/weights/best.pt` (20 MB) |
-| Its full training configuration and per-epoch record | `args.yaml`, `results.csv` |
-| A readable proxy for the simulation scene | `docs/scene_contract.yaml` |
+| Kompletan izvorni kod: sempler, snimač, ekstraktor, označavanje, izvoz, 4 ROS 2 čvora | |
+| **Istrenirani detektor** | `runs/sfp_yolo26s_p2/weights/best.pt` (20 MB) |
+| Potpuna konfiguracija treniranja i zapis po epohama | `args.yaml`, `results.csv` |
+| **USD scena** | `isaacsim/scene.usd` (9,1 MB) |
+| Čitljiv prikaz scene | `docs/scene_contract.yaml` |
 
-**Not included, and why:**
+**Šta nije uključeno, i zašto:**
 
 | | |
 |---|---|
-| `isaacsim/scene.usd` (9.1 MB) | binary USDC, gitignored. **Without it you cannot run the simulation half** — see below |
-| The dataset (2757 images) and bags (9.9 GB) | regenerate with the pipeline; too large for git |
-| `yolo26s.pt`, `yolo26n.pt` | Ultralytics' own weights, already public at [ultralytics/assets](https://github.com/ultralytics/assets/releases) `v8.4.0` |
+| Skup podataka (2757 slika) i bag fajlovi (9,9 GB) | regenerišu se kroz pipeline; preveliki za git |
+| `yolo26s.pt`, `yolo26n.pt` | Ultralytics-ove težine, već javno dostupne na [ultralytics/assets](https://github.com/ultralytics/assets/releases) `v8.4.0` |
 
-**If you clone this without the scene**, you can still: run the full test suite,
-run the trained detector on your own images or camera topics, and run the
-triangulation and scoring nodes against any source of `sensor_msgs/Image`. You
-cannot regenerate the dataset, retrain from scratch, or refresh the scene
-contract. Ask the author for `scene.usd` if you need those.
+Scena se sada nalazi u repozitorijumu, pa se ceo pipeline može pokrenuti nakon
+kloniranja — pod uslovom da imate Isaac Sim. Bez njega i dalje možete pokrenuti
+testove, koristiti istrenirani detektor nad sopstvenim slikama ili ROS temama, i
+pokretati triangulaciju i proveru tačnosti nad bilo kojim izvorom
+`sensor_msgs/Image` poruka.
 
 ---
 
-## Prerequisites
+## Preduslovi
 
-This project is pinned to specific versions, and mismatches fail in confusing
-ways rather than loudly. [CLAUDE.md](CLAUDE.md) explains each one.
+Projekat je vezan za konkretne verzije, a neslaganja se najčešće ne prijavljuju
+kao jasna greška nego kao čudno ponašanje. [CLAUDE.md](CLAUDE.md) objašnjava
+svaku od njih.
 
-**Hardware**
+**Hardver**
 
-- An NVIDIA GPU. Training was done on an RTX 5090 (Blackwell, `sm_120`), which
-  **requires a CUDA 12.8+ build of torch** — older builds will not run on it.
-- ~32 GB VRAM for training at the default settings; inference needs ~1 GB.
-- Disk: a 1000-episode run produces ~10 GB of bag plus ~324 MB extracted.
+- NVIDIA grafička kartica. Treniranje je rađeno na RTX 5090 (Blackwell,
+  `sm_120`), što **zahteva torch build sa CUDA 12.8 ili novijom** — stariji
+  buildovi neće raditi na toj kartici.
+- Oko 32 GB VRAM-a za treniranje sa podrazumevanim podešavanjima; za inferencu
+  je dovoljno oko 1 GB.
+- Disk: jedno pokretanje od 1000 epizoda proizvodi oko 10 GB bag fajlova i oko
+  324 MB ekstrahovanih podataka.
 
-**Software**
+**Softver**
 
-| | Version | Notes |
+| | Verzija | Napomena |
 |---|---|---|
 | Ubuntu | 24.04 | |
-| ROS 2 | **Jazzy** | Python 3.12 — this matters, see below |
-| Isaac Sim | **5.1.0** | only needed for the simulation half |
-| Python (system) | 3.12 | ships with ROS; runs the extractor and tests |
-| torch | 2.9.1+cu130 | in a venv, see installation |
-| ultralytics | 8.4.155 | ships YOLO26 |
-| OpenUSD | 25.11 | only to regenerate the scene contract |
+| ROS 2 | **Jazzy** | Python 3.12 — to je bitno, videti ispod |
+| Isaac Sim | **5.1.0** | potrebno samo za simulacioni deo |
+| Python (sistemski) | 3.12 | dolazi uz ROS; pokreće ekstraktor i testove |
+| torch | 2.9.1+cu130 | u virtuelnom okruženju, videti instalaciju |
+| ultralytics | 8.4.155 | sadrži YOLO26 |
+| OpenUSD | 25.11 | samo za regenerisanje prikaza scene |
 
-**Four Python interpreters are involved and picking the wrong one is the most
-common failure here.** `./run.sh` selects the right one for every step — prefer
-it to calling scripts directly. The short version:
+**U igri su četiri Python interpretera i izbor pogrešnog je najčešći uzrok
+problema.** `./run.sh` bira ispravan za svaki korak — koristite njega umesto
+direktnog pozivanja skripti. Ukratko:
 
-| Interpreter | For |
+| Interpreter | Za šta |
 |---|---|
-| `~/isaacsim/python.sh` (3.11) | the sampler, inside Isaac Sim |
-| `/usr/bin/python3` (3.12) | extractor, labeller, exporter, tests |
-| `~/.venv/bin/python` (3.12) | anything touching torch — training, detector |
-| OpenUSD venv | the scene contract dump |
+| `~/isaacsim/python.sh` (3.11) | sempler, unutar Isaac Sim-a |
+| `/usr/bin/python3` (3.12) | ekstraktor, označavanje, izvoz, testovi |
+| `~/.venv/bin/python` (3.12) | sve što koristi torch — treniranje, detektor |
+| OpenUSD venv | generisanje `scene_contract.yaml` |
 
-Note the detector node runs under the **venv**, not the system interpreter, and
-that works only because ROS 2 Jazzy and the venv are both Python 3.12 — rclpy's
-`cp312` extension modules import cleanly under it. Isaac Sim's bundled 3.11 does
-not get that luxury, which is why the simulation talks to ROS through an
-OmniGraph node instead of `rclpy`.
+Detektorski čvor se pokreće pod **venv** interpreterom, a ne sistemskim, i to
+funkcioniše samo zato što su ROS 2 Jazzy i venv oba Python 3.12 — `cp312`
+ekstenzije `rclpy` biblioteke se tada uredno učitavaju. Isaac Sim nosi Python
+3.11 i nema tu mogućnost, zbog čega simulacija komunicira sa ROS-om preko
+OmniGraph čvora umesto preko `rclpy`.
 
 ---
 
-## Installation
+## Instalacija
 
 ```bash
 git clone https://github.com/Cevilko/port_position_estimation.git
 cd port_position_estimation
 ```
 
-**1. ROS 2 Jazzy** — follow the
-[official instructions](https://docs.ros.org/en/jazzy/Installation.html), then:
+**1. ROS 2 Jazzy** — pratite
+[zvanično uputstvo](https://docs.ros.org/en/jazzy/Installation.html), zatim:
 
 ```bash
 sudo apt install ros-jazzy-vision-msgs ros-jazzy-rosbag2-storage-mcap
 ```
 
-`vision_msgs` is required by the detector and triangulator; the mcap storage
-plugin is what bags are written with.
+`vision_msgs` koriste detektor i triangulacija; mcap plugin je format u kom se
+snimaju bag fajlovi.
 
-**2. A venv with torch and ultralytics.** Anything importing torch runs here,
-never under the system interpreter:
+**2. Virtuelno okruženje sa torch-om i ultralytics-om.** Sve što koristi torch
+pokreće se odavde, nikada pod sistemskim interpreterom:
 
 ```bash
 python3 -m venv ~/.venv
@@ -113,89 +115,86 @@ python3 -m venv ~/.venv
 ~/.venv/bin/pip install ultralytics==8.4.155
 ```
 
-Override the location with `TRAIN_PYTHON=/path/to/python` if you put it
-elsewhere. Check it found your GPU:
+Ako okruženje držite na drugom mestu, postavite `TRAIN_PYTHON=/putanja/do/python`.
+Provera da li je kartica prepoznata:
 
 ```bash
 ~/.venv/bin/python -c "import torch; print(torch.cuda.get_device_name(0))"
 ```
 
-**3. Build the ROS 2 workspace:**
+**3. Build ROS 2 radnog prostora:**
 
 ```bash
 ./run.sh build
 ```
 
-**4. Isaac Sim 5.1** — only for the simulation half. Install to `~/isaacsim`, or
-point `ISAAC_PYTHON` at its `python.sh`. You also need `isaacsim/scene.usd`,
-which is not in this repository.
+**4. Isaac Sim 5.1** — potreban samo za simulacioni deo. Instalirajte ga u
+`~/isaacsim`, ili postavite `ISAAC_PYTHON` na njegov `python.sh`.
 
-**Verify the install:**
+**Provera instalacije:**
 
 ```bash
-./run.sh check      # 129 tests + scene-contract freshness
+./run.sh check      # 129 testova + svežina prikaza scene
 ```
-
-The contract check reports `SKIP` without `scene.usd`; the tests should all
-pass regardless.
 
 ---
 
-## Usage
+## Korišćenje
 
-### Run the trained detector (no Isaac Sim needed)
+### Pokretanje istreniranog detektora (bez Isaac Sim-a)
 
-The shipped model detects one class, `sfp_port`. On images or a directory:
+Model prepoznaje jednu klasu, `sfp_port`. Nad slikama ili direktorijumom:
 
 ```bash
 ~/.venv/bin/yolo detect predict \
     model=runs/sfp_yolo26s_p2/weights/best.pt \
-    source=<image-or-directory> imgsz=1152 save=True
+    source=<slika-ili-direktorijum> imgsz=1152 save=True
 ```
 
-**Always pass `imgsz=1152`.** The ports are ~17 px at native resolution; the
-ultralytics default of 640 shrinks them to ~9 px and the detector will look far
-worse than it is.
+**Uvek navedite `imgsz=1152`.** Portovi su oko 17 piksela u izvornoj rezoluciji;
+podrazumevanih 640 ih svodi na oko 9 piksela i detektor deluje mnogo lošije nego
+što jeste.
 
-### Run the live perception chain
+### Pokretanje lanca za percepciju u realnom vremenu
 
-Four terminals, or background them and use `./run.sh stop` to end them all.
-Each needs a source of `sensor_msgs/Image` — Isaac Sim, a recorded bag, or a
-real camera.
+Četiri terminala, ili ih pokrenite u pozadini pa ih sve zaustavite sa
+`./run.sh stop`. Svakom je potreban izvor `sensor_msgs/Image` poruka — Isaac
+Sim, snimljeni bag, ili prava kamera.
 
 ```bash
-./run.sh detect         # images      -> vision_msgs/Detection2DArray
-./run.sh triangulate    # detections  -> PoseWithCovarianceStamped, world frame
-./run.sh error          # estimates   -> distance from /tf truth, per port
-./run.sh rviz           # raw + annotated streams side by side
+./run.sh detect         # slike      -> vision_msgs/Detection2DArray
+./run.sh triangulate    # detekcije  -> PoseWithCovarianceStamped, svetski sistem
+./run.sh error          # procene    -> odstupanje od /tf, po portu
+./run.sh rviz           # sirovi i označeni tokovi jedan pored drugog
 ```
 
-Two things that will otherwise cost you an afternoon:
+Dve stvari koje će vas inače koštati popodneva:
 
-- **`use_sim_time` must match whoever opened the scene.** It defaults to `true`,
-  correct when `./run.sh sample` is driving (it adds a `/clock` publisher at
-  runtime). A hand-opened Isaac Sim or a bag played without `--clock` publishes
-  no `/clock`, and then the node still detects but its timers never fire — no
-  status output and, worse, no warning when it stops receiving images. Pass
+- **`use_sim_time` mora da odgovara načinu na koji je scena pokrenuta.**
+  Podrazumevano je `true`, što je ispravno kada scenu vodi `./run.sh sample`
+  (tada se u toku rada dodaje `/clock` publisher). Ručno pokrenut Isaac Sim ili
+  bag pušten bez `--clock` ne objavljuju `/clock`, pa čvor i dalje detektuje ali
+  mu tajmeri nikada ne okinu — nema izveštaja o radu i, što je gore, nema
+  upozorenja kada prestane da prima slike. U tom slučaju dodajte
   `-p use_sim_time:=false`.
-- **Nothing started in the background stops by itself.** The detector alone
-  holds ~1 GB of VRAM indefinitely. `./run.sh stop` ends them;
-  `./run.sh stop --dry-run` lists them first.
+- **Ništa pokrenuto u pozadini se ne gasi samo.** Samo detektor drži oko 1 GB
+  VRAM-a neograničeno. `./run.sh stop` ih zaustavlja, a
+  `./run.sh stop --dry-run` prvo ispisuje šta je pokrenuto.
 
-### Regenerate the dataset (needs Isaac Sim + `scene.usd`)
+### Generisanje skupa podataka (potreban Isaac Sim)
 
-Two terminals — **the recorder must be running before the sampler starts**, or
-poses are accepted and silently produce no data.
+Dva terminala — **snimač mora da radi pre pokretanja semplera**, inače se poze
+prihvataju a podaci se tiho ne snimaju.
 
 ```bash
 # terminal 1
 ./run.sh recorder
 
 # terminal 2
-./run.sh sample --samples 1000 --headless     # ~2h; ~12 attempts per accepted pose
+./run.sh sample --samples 1000 --headless     # oko 2 h; ~12 pokušaja po prihvaćenoj pozi
 ```
 
-Then, after stopping the recorder so rosbag2 writes its `metadata.yaml`:
+Zatim, nakon zaustavljanja snimača (da bi rosbag2 upisao `metadata.yaml`):
 
 ```bash
 ./run.sh extract                              # bag  -> rosbag_samples/
@@ -203,151 +202,151 @@ Then, after stopping the recorder so rosbag2 writes its `metadata.yaml`:
 ./run.sh train pretrained=yolo26s.pt epochs=100
 ```
 
-`--drop-inconsistent` matters: without it, an image keeps its label for one port
-while a second, visible-but-unlabelable port is left as background.
+`--drop-inconsistent` je bitan: bez njega slika zadrži oznaku za jedan port, dok
+drugi, vidljiv ali neoznačiv port ostaje tretiran kao pozadina.
 
-### Every command
+### Sve komande
 
-| Step | Does |
+| Korak | Radnja |
 |---|---|
-| `build` | colcon build the ROS 2 workspace |
-| `recorder` | serve `/record_rosbag`, writing an mcap bag per trigger |
-| `sample` | randomise poses in Isaac Sim, trigger a recording per accepted one |
-| `extract` | bag → images, transforms and intrinsics on disk |
-| `bbox` | project the ports into one frame as 2D boxes (`--annotate` to draw) |
-| `yolo` | extracted frames → an Ultralytics dataset |
-| `train` | train a detector; defaults tuned for ~17 px objects |
-| `detect` | run the detector on live camera topics |
-| `triangulate` | multi-view detections → 3D pose with covariance |
-| `error` | score estimates against `/tf`, paired one-to-one |
-| `rviz` | open RViz with the project layout |
-| `contract` | regenerate `docs/scene_contract.yaml` from the scene |
-| `check` | tests + contract freshness — run before committing |
-| `stop` | stop everything this script starts |
-| `info`, `topics` | inspect a bag / list live topics |
+| `build` | colcon build ROS 2 radnog prostora |
+| `recorder` | servira `/record_rosbag` i upisuje mcap bag po pozivu |
+| `sample` | nasumično postavlja poze u Isaac Sim-u i okida snimanje |
+| `extract` | bag → slike, transformacije i parametri kamera na disk |
+| `bbox` | projektuje portove u jedan frejm kao 2D okvire (`--annotate` da se iscrtaju) |
+| `yolo` | ekstrahovani frejmovi → Ultralytics skup podataka |
+| `train` | trenira detektor; podrazumevane vrednosti su podešene za objekte od ~17 px |
+| `detect` | pokreće detektor nad živim temama kamera |
+| `triangulate` | detekcije iz više kamera → 3D poza sa kovarijansom |
+| `error` | poredi procene sa `/tf`, uparivanje jedan na jedan |
+| `rviz` | otvara RViz sa podešenim rasporedom |
+| `contract` | regeneriše `docs/scene_contract.yaml` iz scene |
+| `check` | testovi + svežina prikaza scene — pokrenuti pre komitovanja |
+| `stop` | zaustavlja sve što je ova skripta pokrenula |
+| `info`, `topics` | pregled bag fajla / lista aktivnih tema |
 
-`./run.sh` with no arguments prints the same list with full help.
+`./run.sh` bez argumenata ispisuje istu listu sa punim objašnjenjima.
 
 ---
 
-## How it fits together
+## Kako se delovi uklapaju
 
 ```
-isaacsim/scene.usd                    UR5e + 3 cameras + ROS 2 OmniGraph
-        │                             (binary; see docs/scene_contract.yaml)
+isaacsim/scene.usd                    UR5e + 3 kamere + ROS 2 OmniGraph
+        │                             (binarno; videti docs/scene_contract.yaml)
         │
-scripts/randomize_visible_joints.py   rejection-samples arm and fixture poses
-        │                             until both SFP entrances are visible to
-        │                             the centre camera -- in frustum, facing
-        │                             it, unoccluded -- then fires the scene's
-        │                             ROS2 Service Client node
+scripts/randomize_visible_joints.py   nasumično bira poze ruke i nosača dok oba
+        │                             ulaza porta ne budu vidljiva centralnoj
+        │                             kameri -- u vidnom polju, okrenuti ka njoj,
+        │                             nezaklonjeni -- pa okida ROS 2 servis
         │  /record_rosbag  (std_srvs/Trigger)
         ▼
-ros_ws/src/bag_recorder_node          snapshots 3x(image + camera_info) + /tf
-        │                             into an mcap bag on each call
+ros_ws/src/bag_recorder_node          pri svakom pozivu upisuje 3x(slika +
+        │                             camera_info) i /tf u mcap bag
         ▼
-rosbags/<name>/                       the recorded dataset (gitignored)
+rosbags/<ime>/                        snimljeni podaci (van git-a)
         │
-scripts/extract_rosbag_samples.py     every recorded frame: three images, the
-        ▼                             CameraInfo, and world-resolved TF for the
-rosbag_samples/<name>/                cameras and both ports, as JPEG + YAML
+scripts/extract_rosbag_samples.py     svaki snimljeni frejm: tri slike,
+        ▼                             CameraInfo i transformacije kamera i
+rosbag_samples/<ime>/                 portova, kao JPEG + YAML
         │
-scripts/export_yolo_dataset.py        projected boxes -> an Ultralytics dataset
+scripts/export_yolo_dataset.py        projektovani okviri -> Ultralytics skup
         ▼
-yolo_dataset/ -> ./run.sh train -> runs/<name>/weights/best.pt
+yolo_dataset/ -> ./run.sh train -> runs/<ime>/weights/best.pt
         │
 yolo_detector_node -> port_triangulator_node -> port_error_node
-                                      live detection, triangulation, scoring
+                                      detekcija, triangulacija, provera tačnosti
 ```
 
-No bounding box is ever drawn by hand: labels are projected from the recorded
-transforms and the ports' known aperture size.
+Nijedan granični okvir se ne crta ručno: oznake se projektuju iz snimljenih
+transformacija i poznatih dimenzija otvora porta.
 
 ---
 
-## Documentation
+## Dokumentacija
 
 | | |
 |---|---|
-| [CLAUDE.md](CLAUDE.md) | **read before running anything** — versions, interpreters, startup order, and every sharp edge found so far |
-| [docs/pipeline.md](docs/pipeline.md) | the whole flow stage by stage, with the maths |
-| [docs/components.md](docs/components.md) | what each script and node does |
-| [docs/dataset.md](docs/dataset.md) | how the dataset was built, and its caveats |
-| [docs/training.md](docs/training.md) | the training run and what its score means |
-| [docs/scene_contract.yaml](docs/scene_contract.yaml) | **generated** — what the scene publishes, in readable form |
+| [CLAUDE.md](CLAUDE.md) | **pročitati pre pokretanja bilo čega** — verzije, interpreteri, redosled pokretanja i sve zamke pronađene do sada |
+| [docs/pipeline.md](docs/pipeline.md) | ceo tok, korak po korak, sa matematikom |
+| [docs/components.md](docs/components.md) | šta radi svaka skripta i svaki čvor |
+| [docs/dataset.md](docs/dataset.md) | kako je napravljen skup podataka i koja su mu ograničenja |
+| [docs/training.md](docs/training.md) | tok treniranja i šta rezultat zaista znači |
+| [docs/scene_contract.yaml](docs/scene_contract.yaml) | **generisano** — šta scena objavljuje, u čitljivom obliku |
+
+Dokumentacija je na engleskom jeziku.
 
 ---
 
-## Published topics
+## Objavljene ROS teme
 
-From the scene:
+Iz scene:
 
-| Topic | Type |
+| Tema | Tip |
 |---|---|
 | `/{center,left,right}_camera/image` | `sensor_msgs/Image`, 1152×1024 `rgb8` |
-| `/{center,left,right}_camera/camera_info` | `sensor_msgs/CameraInfo`, fx=fy=997.66, cx=576, cy=512 |
-| `/tf` | `tf2_msgs/TFMessage` — arm links, camera optical frames, both port entrances |
-| `/record_rosbag` | `std_srvs/Trigger` (served by `bag_recorder_node`) |
+| `/{center,left,right}_camera/camera_info` | `sensor_msgs/CameraInfo`, fx=fy=997,66, cx=576, cy=512 |
+| `/tf` | `tf2_msgs/TFMessage` — zglobovi ruke, optički koordinatni sistemi kamera, oba ulaza porta |
+| `/record_rosbag` | `std_srvs/Trigger` (servira `bag_recorder_node`) |
 
-From the perception nodes:
+Iz čvorova za percepciju:
 
-| Topic | Type |
+| Tema | Tip |
 |---|---|
 | `<camera>/detections` | `vision_msgs/Detection2DArray` |
-| `<camera>/detections_image` | `sensor_msgs/Image` — annotated, viewable in RViz |
-| `/port_triangulator_node/port_<n>/pose` | `geometry_msgs/PoseWithCovarianceStamped`, world frame |
-| `/port_error_node/port_<n>/error` | `std_msgs/Float64` — metres from the true pose |
+| `<camera>/detections_image` | `sensor_msgs/Image` — označena slika, vidljiva u RViz-u |
+| `/port_triangulator_node/port_<n>/pose` | `geometry_msgs/PoseWithCovarianceStamped`, svetski sistem |
+| `/port_error_node/port_<n>/error` | `std_msgs/Float64` — odstupanje u metrima |
 
-RViz has no `Detection2DArray` display, so `rviz/dipl.rviz` shows the annotated
-image topics instead.
-
----
-
-## Known limitations
-
-- **Port identity is positional, not semantic.** The triangulator's `port_0`
-  matches the true `sfp_port_0_entrance` about half the time. Telling them apart
-  needs a third landmark or temporal tracking.
-- **Detector recall is capped by the two side cameras**, which the sampler never
-  vets for occlusion: 0.997 on the centre camera, 0.888 and 0.843 on the sides.
-  A labelling artifact, not a model weakness.
-- **The fibre cable is switched off in the scene** (`/UR5e_gripper/cable` is
-  deactivated) and was for the whole pipeline, so no render contains one and the
-  occlusion test never rejected a pose it would have blocked.
-- **Covariance is deliberately pessimistic** — the default `pixel_sigma=1.5`
-  over-states uncertainty roughly 8x against measured error.
-- **Every number here comes from one room, one fixture and one renderer**, with
-  validation drawn from the same run as training. They say the geometry is right;
-  they say nothing about a real camera.
-- The scene references assets by absolute path into `~/IsaacLab`, three of which
-  are already dead. It is not portable between machines as-is.
+RViz nema prikaz za `Detection2DArray`, pa `rviz/dipl.rviz` prikazuje označene
+slike umesto toga.
 
 ---
 
-## Licence
+## Poznata ograničenja
 
-This project is licensed under the **GNU Affero General Public License v3.0**.
-See [LICENSE](LICENSE) for the full text.
+- **Identitet porta je pozicioni, a ne semantički.** `port_0` iz triangulacije
+  odgovara stvarnom `sfp_port_0_entrance` u otprilike polovini slučajeva.
+  Razlikovanje bi zahtevalo treću referentnu tačku ili praćenje kroz vreme.
+- **Odziv detektora ograničavaju bočne kamere**, koje sempler ne proverava na
+  zaklonjenost: 0,997 na centralnoj kameri, 0,888 i 0,843 na bočnim. To je
+  posledica načina označavanja, a ne slabosti modela.
+- **Optički kabl je isključen u sceni** (`/UR5e_gripper/cable` je deaktiviran) i
+  bio je isključen tokom celog rada, pa ga nema ni na jednom renderu, a provera
+  zaklonjenosti nikada nije odbacila pozu koju bi on zaklonio.
+- **Kovarijansa je namerno pesimistična** — podrazumevano `pixel_sigma=1.5`
+  precenjuje nesigurnost oko 8 puta u odnosu na izmerenu grešku.
+- **Svi brojevi potiču iz jedne prostorije, jednog rasporeda i jednog rendera**,
+  uz validaciju iz istog pokretanja kao i treniranje. Oni pokazuju da je
+  geometrija ispravna; ne govore ništa o pravoj kameri.
+- Scena referencira modele apsolutnim putanjama ka `~/IsaacLab`, od kojih tri
+  više ne postoje. U tom obliku nije prenosiva između računara.
 
-It uses [Ultralytics](https://github.com/ultralytics/ultralytics) YOLO26, which
-is itself AGPL-3.0. `yolo_detector_node` imports it, and
-`runs/sfp_yolo26s_p2/weights/best.pt` was trained from Ultralytics' `yolo26s.pt`
-weights, so that model is a derivative work — which is why the weights and their
-full training configuration are distributed here with the source rather than
-held back.
+---
 
-**What AGPL-3.0 means for you.** You may use, study, modify and redistribute
-this work, including commercially, provided that derivative works are also
-released under AGPL-3.0 with complete corresponding source. Section 13 extends
-that obligation to network use: if you run a modified version and let users
-interact with it over a network, you must offer them the source. If those terms
-do not suit your use, Ultralytics sells a commercial licence that removes the
-AGPL obligation for their part of the stack.
+## Licenca
 
-**Third-party components.** The three files under
-`ros_ws/src/bag_recorder_node/test/` are Copyright 2015 Open Source Robotics
-Foundation and remain under their original **Apache-2.0** terms — Apache-2.0 is
-compatible with AGPL-3.0 in this direction, and relabelling someone else's files
-would not have been. Ultralytics' own `yolo26s.pt` and `yolo26n.pt` weights are
-not redistributed here; fetch them from
+Projekat je licenciran pod **GNU Affero General Public License v3.0**. Pun tekst
+se nalazi u [LICENSE](LICENSE).
+
+Koristi [Ultralytics](https://github.com/ultralytics/ultralytics) YOLO26, koji je
+i sam pod AGPL-3.0. `yolo_detector_node` ga uvozi, a
+`runs/sfp_yolo26s_p2/weights/best.pt` je treniran iz Ultralytics-ovih `yolo26s.pt`
+težina, pa je taj model izvedeno delo — zbog čega se težine i kompletna
+konfiguracija treniranja distribuiraju ovde zajedno sa izvornim kodom.
+
+**Šta AGPL-3.0 znači za vas.** Smete da koristite, proučavate, menjate i dalje
+distribuirate ovaj rad, uključujući i komercijalno, pod uslovom da izvedena dela
+takođe objavite pod AGPL-3.0 sa kompletnim pripadajućim izvornim kodom. Član 13
+proširuje tu obavezu i na mrežno korišćenje: ako pokrećete izmenjenu verziju i
+korisnici joj pristupaju preko mreže, morate im ponuditi izvorni kod. Ako vam ti
+uslovi ne odgovaraju, Ultralytics prodaje komercijalnu licencu koja uklanja AGPL
+obavezu za njihov deo.
+
+**Komponente trećih lica.** Tri fajla u
+`ros_ws/src/bag_recorder_node/test/` su Copyright 2015 Open Source Robotics
+Foundation i ostaju pod originalnom **Apache-2.0** licencom — Apache-2.0 je
+kompatibilna sa AGPL-3.0 u ovom smeru, dok bi prelicenciranje tuđih fajlova bilo
+neispravno. Ultralytics-ove težine `yolo26s.pt` i `yolo26n.pt` se ovde ne
+distribuiraju; preuzmite ih sa
 [ultralytics/assets](https://github.com/ultralytics/assets/releases).
