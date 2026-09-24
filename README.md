@@ -10,7 +10,7 @@ kovarijansom, i porede se sa stvarnim vrednostima.
 **Izmereno na celom lancu: medijana greške pozicije 0,43 mm**, mAP50 detektora
 0,919, oko 6 ms po frejmu. Videti [docs/training.md](docs/training.md) i
 [docs/dataset.md](docs/dataset.md) za način na koji su dobijeni ti brojevi i šta
-oni jesu, a šta nisu.
+oni predstavljaju.
 
 Zadatak potiče sa Intrinsic-ovog takmičenja
 [AI for Industry Challenge](https://www.intrinsic.ai/events/ai-for-industry-challenge).
@@ -33,12 +33,6 @@ Zadatak potiče sa Intrinsic-ovog takmičenja
 |---|---|
 | Skup podataka (2757 slika) i bag fajlovi (9,9 GB) | regenerišu se kroz pipeline; preveliki za git |
 | `yolo26s.pt`, `yolo26n.pt` | Ultralytics-ove težine, već javno dostupne na [ultralytics/assets](https://github.com/ultralytics/assets/releases) `v8.4.0` |
-
-Scena se sada nalazi u repozitorijumu, pa se ceo pipeline može pokrenuti nakon
-kloniranja — pod uslovom da imate Isaac Sim. Bez njega i dalje možete pokrenuti
-testove, koristiti istrenirani detektor nad sopstvenim slikama ili ROS temama, i
-pokretati triangulaciju i proveru tačnosti nad bilo kojim izvorom
-`sensor_msgs/Image` poruka.
 
 ---
 
