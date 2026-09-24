@@ -1,3 +1,5 @@
+# port_position_estimation - Copyright (C) 2026 Cevilko <lvelicko03@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-only
 """sensor_msgs/Image <-> numpy, without cv_bridge.
 
 cv_bridge is deliberately not used. It is compiled against NumPy 1.x, and the

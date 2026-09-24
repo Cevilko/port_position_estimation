@@ -5,7 +5,7 @@
   <version>0.0.0</version>
   <description>Runs the trained SFP port detector on live camera topics.</description>
   <maintainer email="sm220315d@student.etf.bg.ac.rs">etfrobotics</maintainer>
-  <license>Apache-2.0</license>
+  <license>AGPL-3.0-only</license>
 
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# port_position_estimation - Copyright (C) 2026 Cevilko <lvelicko03@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-only
 """Export per-sample triangulation results as CSV, for plotting.
 
 The running ROS nodes compute all of this and then reduce it to a log line;

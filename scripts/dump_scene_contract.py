@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# port_position_estimation - Copyright (C) 2026 Cevilko <lvelicko03@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-only
 """Dump a readable summary of the USD scene to docs/scene_contract.yaml.
 
 ``isaacsim/scene.usd`` is binary USDC and gitignored, so neither a human

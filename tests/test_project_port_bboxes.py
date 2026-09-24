@@ -1,3 +1,5 @@
+# port_position_estimation - Copyright (C) 2026 Cevilko <lvelicko03@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-only
 """Tests for the pure functions in ``scripts/project_port_bboxes.py``.
 
 The projection maths is the part that can be checked without a bag or a

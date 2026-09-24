@@ -326,14 +326,28 @@ image topics instead.
 
 ## Licence
 
-This project uses [Ultralytics](https://github.com/ultralytics/ultralytics)
-YOLO26, which is licensed **AGPL-3.0**. `yolo_detector_node` imports it, and
-`runs/sfp_yolo26s_p2/weights/best.pt` was trained from Ultralytics' `yolo26s.pt`
-weights, so the trained model and its full configuration are distributed here
-with the source rather than held back.
+This project is licensed under the **GNU Affero General Public License v3.0**.
+See [LICENSE](LICENSE) for the full text.
 
-> **Relicensing to AGPL-3.0 is in progress.** Some package manifests still
-> declare Apache-2.0 and are being updated; treat AGPL-3.0 as the intended
-> licence for this work. The three files under
-> `ros_ws/src/bag_recorder_node/test/` are Copyright 2015 Open Source Robotics
-> Foundation and remain under their original Apache-2.0 terms.
+It uses [Ultralytics](https://github.com/ultralytics/ultralytics) YOLO26, which
+is itself AGPL-3.0. `yolo_detector_node` imports it, and
+`runs/sfp_yolo26s_p2/weights/best.pt` was trained from Ultralytics' `yolo26s.pt`
+weights, so that model is a derivative work — which is why the weights and their
+full training configuration are distributed here with the source rather than
+held back.
+
+**What AGPL-3.0 means for you.** You may use, study, modify and redistribute
+this work, including commercially, provided that derivative works are also
+released under AGPL-3.0 with complete corresponding source. Section 13 extends
+that obligation to network use: if you run a modified version and let users
+interact with it over a network, you must offer them the source. If those terms
+do not suit your use, Ultralytics sells a commercial licence that removes the
+AGPL obligation for their part of the stack.
+
+**Third-party components.** The three files under
+`ros_ws/src/bag_recorder_node/test/` are Copyright 2015 Open Source Robotics
+Foundation and remain under their original **Apache-2.0** terms — Apache-2.0 is
+compatible with AGPL-3.0 in this direction, and relabelling someone else's files
+would not have been. Ultralytics' own `yolo26s.pt` and `yolo26n.pt` weights are
+not redistributed here; fetch them from
+[ultralytics/assets](https://github.com/ultralytics/assets/releases).

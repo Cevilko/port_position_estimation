@@ -1,3 +1,5 @@
+# port_position_estimation - Copyright (C) 2026 Cevilko <lvelicko03@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-only
 """Multi-view triangulation of the SFP ports, and the uncertainty of the result.
 
 Pure numpy: no ROS imports, so every claim below is testable without a graph.

@@ -1,3 +1,5 @@
+# port_position_estimation - Copyright (C) 2026 Cevilko <lvelicko03@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-only
 """Tests for the pure functions in ``scripts/extract_rosbag_samples.py``.
 
 These are the parts of the pipeline that can be checked without Isaac Sim, a

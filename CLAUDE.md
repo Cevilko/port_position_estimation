@@ -519,6 +519,23 @@ change can be checked cheaply.
   four documented OmniGraph "gotchas" are undocumented by NVIDIA and unverified
   on 5.1; treat them as folklore until tested.
 
+## Licensing
+
+The repo is **AGPL-3.0-only**, because `yolo_detector_node` imports Ultralytics
+and that is AGPL. Consequences worth knowing before adding anything:
+
+- **New source files need the two-line header** that every other `.py` and
+  `.sh` carries (`Copyright (C)` + `SPDX-License-Identifier: AGPL-3.0-only`).
+- **`runs/sfp_yolo26s_p2/` is tracked on purpose** -- `best.pt`, `args.yaml` and
+  `results.csv` only. The `.gitignore` block that allows them sits at the end of
+  the file and is order-sensitive; read its comments before editing it.
+- **`ros_ws/src/bag_recorder_node/test/` is Apache-2.0 and not ours.** Those
+  three files are Copyright 2015 Open Source Robotics Foundation. Leave their
+  headers alone; Apache-2.0 flows into AGPL-3.0 but not back out.
+- **Do not vendor code under a licence AGPL cannot absorb.** Apache-2.0, MIT and
+  BSD are fine; anything proprietary is not, which is also why the Isaac Sim
+  side runs as a separate process exchanging ROS messages rather than linking.
+
 ## Conventions
 
 - Don't commit binaries. `*.usd`, `*.usda`, `*.mcap` and `rosbags/` are ignored

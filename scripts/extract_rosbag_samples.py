@@ -1,4 +1,6 @@
 #!/usr/bin/python3
+# port_position_estimation - Copyright (C) 2026 Cevilko <lvelicko03@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-only
 """Extract every recorded frame's images, TFs, and CameraInfo from a ROS 2 bag.
 
 ``bag_recorder_node`` writes all of a trigger's topics under one identical bag

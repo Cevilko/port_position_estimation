@@ -1,4 +1,6 @@
 #!/usr/bin/python3
+# port_position_estimation - Copyright (C) 2026 Cevilko <lvelicko03@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-only
 """Project the SFP port entrances into an image as 2D bounding boxes.
 
 The entrance prims are bare Xforms -- they carry a pose but no geometry -- so

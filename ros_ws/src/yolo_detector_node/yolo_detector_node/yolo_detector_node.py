@@ -1,3 +1,5 @@
+# port_position_estimation - Copyright (C) 2026 Cevilko <lvelicko03@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-only
 """Run the SFP port detector on live camera topics.
 
 Subscribes to one or more ``sensor_msgs/Image`` topics, runs the trained YOLO

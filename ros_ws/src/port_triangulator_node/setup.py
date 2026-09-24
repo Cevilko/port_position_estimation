@@ -1,3 +1,5 @@
+# port_position_estimation - Copyright (C) 2026 Cevilko <lvelicko03@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-only
 from setuptools import find_packages, setup
 
 package_name = 'port_triangulator_node'
@@ -16,7 +18,7 @@ setup(
     maintainer='etfrobotics',
     maintainer_email='sm220315d@student.etf.bg.ac.rs',
     description='Triangulates SFP port positions from multi-camera YOLO detections.',
-    license='Apache-2.0',
+    license='AGPL-3.0-only',
     extras_require={'test': ['pytest']},
     # As with yolo_detector_node, `ros2 run` gives this a /usr/bin/python3
     # shebang. It does not need torch, but it is launched alongside the
