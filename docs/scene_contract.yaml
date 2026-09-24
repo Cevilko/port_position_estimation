@@ -2,7 +2,8 @@
 # Regenerate and commit after any change to isaacsim/scene.usd.
 
 source_stage: "isaacsim/scene.usd"
-total_prims: 421
+total_prims: 421  # active, defined, loaded
+total_prims_including_inactive: 447
 
 # ----------------------------------------------------------------------
 cameras:
@@ -172,6 +173,58 @@ port_entrances:
   - name: "sfp_port_0_entrance"
     prim: "/nic_card_visual/node_0099100_011LFC_03/sfp_port_0_entrance"
     world_position: [0.288775, 0.35297, 1.297432]
+
+# ----------------------------------------------------------------------
+not_rendered:
+  # Switched off with SetActive(False). These are absent from
+  # stage.Traverse() entirely, so they are missing from every section
+  # above AND from total_prims -- the count reconciles only here.
+  deactivated:
+    - prim: "/UR5e_gripper/aic_unified_robot/center_camera_camera_link/visuals"
+      type: "Xform"
+    - prim: "/UR5e_gripper/aic_unified_robot/center_camera_optical/_deprecated"
+      type: "Camera"
+    - prim: "/UR5e_gripper/aic_unified_robot/left_camera_camera_link/visuals"
+      type: "Xform"
+    - prim: "/UR5e_gripper/aic_unified_robot/right_camera_camera_link/visuals"
+      type: "Xform"
+    - prim: "/UR5e_gripper/cable"
+      type: "Xform"
+  # Authored 'invisible'. Still traversed and still transformed, so
+  # these DO appear in the sections above. Only the root of each
+  # hidden branch is listed; visibility is inherited.
+  invisible:
+    - prim: "/aic_world/enclosure/enclosure_link/enclosure_visual/geometry/V1014952_001"
+      type: "Mesh"
+      hides_descendants: 0
+    - prim: "/UR5e_gripper/aic_unified_robot/left_camera_camera_link/collisions"
+      type: "Xform"
+      hides_descendants: 0
+  # purpose is guide or proxy rather than default or render. Collision
+  # proxies normally live here and are expected; a new entry is not.
+  non_render_purpose:
+    - prim: "/aic_world/enclosure/enclosure_link/v1015026001_collider_box"
+      purpose: "guide"
+    - prim: "/aic_world/enclosure/enclosure_link/v1015028001_collider_box"
+      purpose: "guide"
+    - prim: "/aic_world/enclosure/enclosure_link/v1015013001_collider_box"
+      purpose: "guide"
+    - prim: "/aic_world/enclosure/enclosure_link/v1015027_collider_box"
+      purpose: "guide"
+    - prim: "/aic_world/enclosure/enclosure_link/v1015029_collider_box"
+      purpose: "guide"
+    - prim: "/aic_world/enclosure/enclosure_link/v1015030_collider_box"
+      purpose: "guide"
+    - prim: "/aic_world/enclosurewalls/enclosure_walls_link/v1015062006_collider_box"
+      purpose: "guide"
+    - prim: "/aic_world/enclosurewalls/enclosure_walls_link/v1015062005_collider_box"
+      purpose: "guide"
+    - prim: "/aic_world/enclosurewalls/enclosure_walls_link/v1015062007_collider_box"
+      purpose: "guide"
+    - prim: "/aic_world/enclosurewalls/enclosure_walls_link/v1015062008_collider_box"
+      purpose: "guide"
+    - prim: "/aic_world/floor/floor_link/floor_cylinder"
+      purpose: "guide"
 
 # ----------------------------------------------------------------------
 unresolved_references:

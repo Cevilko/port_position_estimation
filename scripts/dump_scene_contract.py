@@ -153,6 +153,82 @@ def camera_intrinsics(camera: UsdGeom.Camera, width: int, height: int) -> tuple[
     return intrinsics, warning
 
 
+def all_prims(stage: Usd.Stage) -> list:
+    """Every prim, including the deactivated ones ``Traverse()`` prunes.
+
+    ``stage.Traverse()`` uses the default predicate -- active, defined, loaded --
+    so a **deactivated** prim is not merely skipped by the renderer, it is
+    absent from the traversal entirely and therefore from every other section of
+    this dump, down to ``total_prims``. That is how the fibre cable was switched
+    off, and why nothing in the contract revealed it.
+    """
+    return list(Usd.PrimRange.Stage(stage, Usd.PrimAllPrimsPredicate))
+
+
+def deactivated_roots(stage: Usd.Stage) -> list:
+    """Prims switched off with ``SetActive(False)``, outermost first.
+
+    A deactivated prim composes no children, so what is listed here is the whole
+    of what vanished.
+    """
+    roots = []
+    for prim in all_prims(stage):
+        if prim.IsActive():
+            continue
+        ancestor = prim.GetParent()
+        while ancestor and ancestor.IsValid() and not ancestor.IsPseudoRoot():
+            if not ancestor.IsActive():
+                break
+            ancestor = ancestor.GetParent()
+        else:
+            roots.append(prim)
+    return roots
+
+
+def hidden_subtree_roots(stage: Usd.Stage) -> list:
+    """Prims authored ``invisible`` that no invisible ancestor already hides.
+
+    Visibility is inherited, so a hidden branch would otherwise report every
+    prim beneath it and bury the one fact that matters -- which branch was
+    switched off. Only the roots are returned.
+    """
+    hidden = []
+    for prim in all_prims(stage):
+        imageable = UsdGeom.Imageable(prim)
+        if not imageable:
+            continue
+        if imageable.GetVisibilityAttr().Get() != UsdGeom.Tokens.invisible:
+            continue
+        ancestor = prim.GetParent()
+        while ancestor and ancestor.IsValid() and not ancestor.IsPseudoRoot():
+            ancestor_imageable = UsdGeom.Imageable(ancestor)
+            if (ancestor_imageable
+                    and ancestor_imageable.GetVisibilityAttr().Get() == UsdGeom.Tokens.invisible):
+                break
+            ancestor = ancestor.GetParent()
+        else:
+            hidden.append(prim)
+    return hidden
+
+
+def non_default_purposes(stage: Usd.Stage) -> list:
+    """Prims a render-purpose camera skips because of ``purpose``.
+
+    ``guide`` and ``proxy`` geometry is left out of a render just as surely as
+    an invisible prim is, and looks identical from the outside.
+    """
+    out = []
+    for prim in all_prims(stage):
+        imageable = UsdGeom.Imageable(prim)
+        if not imageable:
+            continue
+        purpose = imageable.GetPurposeAttr().Get()
+        if purpose in (None, UsdGeom.Tokens.default_, UsdGeom.Tokens.render):
+            continue
+        out.append((prim, purpose))
+    return out
+
+
 def world_translation(prim: Usd.Prim) -> tuple | None:
     if not prim or not prim.IsValid() or not UsdGeom.Xformable(prim):
         return None
@@ -204,7 +280,8 @@ def collect(stage: Usd.Stage, unresolved: list[str]) -> list[str]:
     lines.append("# Regenerate and commit after any change to isaacsim/scene.usd.")
     lines.append("")
     lines.append(f"source_stage: {quote('isaacsim/scene.usd')}")
-    lines.append(f"total_prims: {len(prims)}")
+    lines.append(f"total_prims: {len(prims)}  # active, defined, loaded")
+    lines.append(f"total_prims_including_inactive: {len(all_prims(stage))}")
 
     # --- render products, keyed by camera, so resolution and intrinsics meet ---
     products = {}
@@ -324,6 +401,46 @@ def collect(stage: Usd.Stage, unresolved: list[str]) -> list[str]:
         position = world_translation(prim)
         if position:
             lines.append(f"    world_position: [{', '.join(str(v) for v in position)}]")
+
+    # --- what the cameras will not see --------------------------------------
+    # Three different mechanisms, one consequence: the prim is in the stage and
+    # may be listed above, but no camera sees it -- and it writes nothing to the
+    # depth buffer the sampler's occlusion test reads, so a pose it would block
+    # is never rejected. This is a scene edit nothing else here reveals.
+    section("not_rendered")
+    lines.append("  # Switched off with SetActive(False). These are absent from")
+    lines.append("  # stage.Traverse() entirely, so they are missing from every section")
+    lines.append("  # above AND from total_prims -- the count reconciles only here.")
+    lines.append("  deactivated:")
+    deactivated = deactivated_roots(stage)
+    for prim in deactivated:
+        lines.append(f"    - prim: {quote(prim.GetPath())}")
+        lines.append(f"      type: {quote(prim.GetTypeName() or 'Xform')}")
+    if not deactivated:
+        lines.append("    []")
+
+    lines.append("  # Authored 'invisible'. Still traversed and still transformed, so")
+    lines.append("  # these DO appear in the sections above. Only the root of each")
+    lines.append("  # hidden branch is listed; visibility is inherited.")
+    lines.append("  invisible:")
+    hidden = hidden_subtree_roots(stage)
+    for prim in hidden:
+        descendants = sum(1 for _ in Usd.PrimRange(prim)) - 1
+        lines.append(f"    - prim: {quote(prim.GetPath())}")
+        lines.append(f"      type: {quote(prim.GetTypeName() or 'Xform')}")
+        lines.append(f"      hides_descendants: {descendants}")
+    if not hidden:
+        lines.append("    []")
+
+    lines.append("  # purpose is guide or proxy rather than default or render. Collision")
+    lines.append("  # proxies normally live here and are expected; a new entry is not.")
+    lines.append("  non_render_purpose:")
+    purposed = non_default_purposes(stage)
+    for prim, purpose in purposed:
+        lines.append(f"    - prim: {quote(prim.GetPath())}")
+        lines.append(f"      purpose: {quote(purpose)}")
+    if not purposed:
+        lines.append("    []")
 
     # --- unresolved references ----------------------------------------------
     # The stage references assets by absolute path into ~/IsaacLab. Some are

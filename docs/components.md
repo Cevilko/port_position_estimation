@@ -123,6 +123,13 @@ the scene publishes. This writes the tracked, readable proxy at
 port frames. Re-run after any scene change; `./run.sh check` fails if it is
 stale.
 
+It also records what the cameras **cannot** see, under `not_rendered`:
+deactivated prims, prims authored invisible, and prims whose `purpose` is guide
+or proxy. That section exists because a prim switched off with
+`SetActive(False)` is pruned from `stage.Traverse()` entirely, so it was absent
+from every other section and from `total_prims` — which is how a disabled cable
+went unnoticed through a whole dataset run.
+
 ---
 
 # ROS 2 nodes

@@ -83,14 +83,22 @@ settle. The sampler now disables every `IsaacArticulationController` node after
 reading the nominal pose from it (order matters: disable first and the arm sags,
 and every sample centres on the sag). `--keep-position-controller` opts out.
 
-**The cable's visuals are disabled in the scene, and the contract cannot tell
-you that.** The fibre cable on the plug in the gripper is not drawn, and was not
-for the 1000-episode dataset run or anything trained on it.
-`docs/scene_contract.yaml` records cameras, topics, joints and port frames but
-**not prim visibility**, and the USD is binary and gitignored, so no tracked
-artifact reveals this -- it has to be carried as knowledge. It matters because
-the occlusion test below reads rendered depth, and an invisible prim writes
-none: acceptance never rejects a pose the cable would have blocked.
+**The cable is switched off in the scene — `/UR5e_gripper/cable` is
+deactivated**, and was for the 1000-episode dataset run and everything trained
+on it. It matters because the occlusion test below reads rendered depth, and a
+prim that is not rendered writes none: acceptance never rejects a pose the
+cable would have blocked.
+
+Note the mechanism. It is **`SetActive(False)`, not `visibility = invisible`**,
+and the difference is not cosmetic: `stage.Traverse()` uses the default
+predicate, so a deactivated prim is absent from the traversal altogether — it
+was missing from every section of the contract *and* from `total_prims`, which
+is why nothing revealed it for a whole pipeline. `docs/scene_contract.yaml` now
+has a **`not_rendered`** section covering all three ways a prim can be in the
+stage yet in no image: `deactivated` (5 here, including the cable and the three
+camera `visuals`), `invisible` (2), and `non_render_purpose` (11 collision
+guides). `total_prims_including_inactive` makes the counts reconcile. `./run.sh
+check` now fails when any of this changes.
 
 **Occlusion is tested against the rendered depth, not physics.** A physics
 raycast would be useless: the whole scene has 11 colliders, none on the gripper
