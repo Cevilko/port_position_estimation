@@ -1,58 +1,234 @@
-# Port-insertion dataset generation (diplomski)
+# Port position estimation
 
-Generates a synthetic vision dataset for **robotic fibre-optic port insertion**
-in Isaac Sim, delivered as ROS 2 bags.
+Estimates the 3D position of SFP fibre-optic ports from three robot-mounted
+cameras, in simulation. A UR5e in Isaac Sim is posed at random in front of a NIC
+card; every accepted pose is recorded, automatically labelled from the transform
+tree, and used to train a YOLO26 detector. At run time the detector's boxes from
+three cameras are triangulated into world-frame positions with covariance, and
+scored against ground truth.
 
-A UR5e carrying an SFP fibre plug is posed at random in front of a NIC card on a
-task board. Poses are kept only when **both SFP port entrances are genuinely
-visible to the centre camera** — in frustum, facing it, and unoccluded — and
-each accepted pose is recorded as three camera images plus resolved transforms.
-Because TF gives the world pose of both port entrances and of every camera,
-every sample is labelled automatically; no box is ever drawn by hand.
+**Measured end to end: median 0.43 mm position error**, detector mAP50 0.919,
+~6 ms/frame inference. See [docs/training.md](docs/training.md) and
+[docs/dataset.md](docs/dataset.md) for how those were obtained and what they do
+and do not mean.
 
-The dataset trains a YOLO26 detector, and the second half of the pipeline
-consumes it: detections from three cameras are triangulated into 3D port
-positions with covariance, and scored against the transform tree.
+The task comes from Intrinsic's
+[AI for Industry Challenge](https://www.intrinsic.ai/events/ai-for-industry-challenge).
 
-The task is the Intrinsic [AI for Industry Challenge](https://www.intrinsic.ai/events/ai-for-industry-challenge);
-the toolkit it comes from is at `~/aic`.
+---
 
-## Quickstart
+## What you get, and what you do not
 
-To generate a dataset, two terminals — the recorder must be up first.
+**Included in this repository:**
+
+| | |
+|---|---|
+| All source: sampler, recorder, extractor, labeller, exporter, 4 ROS 2 nodes | |
+| **The trained detector** | `runs/sfp_yolo26s_p2/weights/best.pt` (20 MB) |
+| Its full training configuration and per-epoch record | `args.yaml`, `results.csv` |
+| A readable proxy for the simulation scene | `docs/scene_contract.yaml` |
+
+**Not included, and why:**
+
+| | |
+|---|---|
+| `isaacsim/scene.usd` (9.1 MB) | binary USDC, gitignored. **Without it you cannot run the simulation half** — see below |
+| The dataset (2757 images) and bags (9.9 GB) | regenerate with the pipeline; too large for git |
+| `yolo26s.pt`, `yolo26n.pt` | Ultralytics' own weights, already public at [ultralytics/assets](https://github.com/ultralytics/assets/releases) `v8.4.0` |
+
+**If you clone this without the scene**, you can still: run the full test suite,
+run the trained detector on your own images or camera topics, and run the
+triangulation and scoring nodes against any source of `sensor_msgs/Image`. You
+cannot regenerate the dataset, retrain from scratch, or refresh the scene
+contract. Ask the author for `scene.usd` if you need those.
+
+---
+
+## Prerequisites
+
+This project is pinned to specific versions, and mismatches fail in confusing
+ways rather than loudly. [CLAUDE.md](CLAUDE.md) explains each one.
+
+**Hardware**
+
+- An NVIDIA GPU. Training was done on an RTX 5090 (Blackwell, `sm_120`), which
+  **requires a CUDA 12.8+ build of torch** — older builds will not run on it.
+- ~32 GB VRAM for training at the default settings; inference needs ~1 GB.
+- Disk: a 1000-episode run produces ~10 GB of bag plus ~324 MB extracted.
+
+**Software**
+
+| | Version | Notes |
+|---|---|---|
+| Ubuntu | 24.04 | |
+| ROS 2 | **Jazzy** | Python 3.12 — this matters, see below |
+| Isaac Sim | **5.1.0** | only needed for the simulation half |
+| Python (system) | 3.12 | ships with ROS; runs the extractor and tests |
+| torch | 2.9.1+cu130 | in a venv, see installation |
+| ultralytics | 8.4.155 | ships YOLO26 |
+| OpenUSD | 25.11 | only to regenerate the scene contract |
+
+**Four Python interpreters are involved and picking the wrong one is the most
+common failure here.** `./run.sh` selects the right one for every step — prefer
+it to calling scripts directly. The short version:
+
+| Interpreter | For |
+|---|---|
+| `~/isaacsim/python.sh` (3.11) | the sampler, inside Isaac Sim |
+| `/usr/bin/python3` (3.12) | extractor, labeller, exporter, tests |
+| `~/.venv/bin/python` (3.12) | anything touching torch — training, detector |
+| OpenUSD venv | the scene contract dump |
+
+Note the detector node runs under the **venv**, not the system interpreter, and
+that works only because ROS 2 Jazzy and the venv are both Python 3.12 — rclpy's
+`cp312` extension modules import cleanly under it. Isaac Sim's bundled 3.11 does
+not get that luxury, which is why the simulation talks to ROS through an
+OmniGraph node instead of `rclpy`.
+
+---
+
+## Installation
 
 ```bash
-./run.sh build                      # once, and after any change under ros_ws/src/
+git clone https://github.com/Cevilko/port_position_estimation.git
+cd port_position_estimation
+```
 
-# terminal 1 -- must be running before terminal 2
+**1. ROS 2 Jazzy** — follow the
+[official instructions](https://docs.ros.org/en/jazzy/Installation.html), then:
+
+```bash
+sudo apt install ros-jazzy-vision-msgs ros-jazzy-rosbag2-storage-mcap
+```
+
+`vision_msgs` is required by the detector and triangulator; the mcap storage
+plugin is what bags are written with.
+
+**2. A venv with torch and ultralytics.** Anything importing torch runs here,
+never under the system interpreter:
+
+```bash
+python3 -m venv ~/.venv
+~/.venv/bin/pip install --index-url https://download.pytorch.org/whl/cu130 torch
+~/.venv/bin/pip install ultralytics==8.4.155
+```
+
+Override the location with `TRAIN_PYTHON=/path/to/python` if you put it
+elsewhere. Check it found your GPU:
+
+```bash
+~/.venv/bin/python -c "import torch; print(torch.cuda.get_device_name(0))"
+```
+
+**3. Build the ROS 2 workspace:**
+
+```bash
+./run.sh build
+```
+
+**4. Isaac Sim 5.1** — only for the simulation half. Install to `~/isaacsim`, or
+point `ISAAC_PYTHON` at its `python.sh`. You also need `isaacsim/scene.usd`,
+which is not in this repository.
+
+**Verify the install:**
+
+```bash
+./run.sh check      # 129 tests + scene-contract freshness
+```
+
+The contract check reports `SKIP` without `scene.usd`; the tests should all
+pass regardless.
+
+---
+
+## Usage
+
+### Run the trained detector (no Isaac Sim needed)
+
+The shipped model detects one class, `sfp_port`. On images or a directory:
+
+```bash
+~/.venv/bin/yolo detect predict \
+    model=runs/sfp_yolo26s_p2/weights/best.pt \
+    source=<image-or-directory> imgsz=1152 save=True
+```
+
+**Always pass `imgsz=1152`.** The ports are ~17 px at native resolution; the
+ultralytics default of 640 shrinks them to ~9 px and the detector will look far
+worse than it is.
+
+### Run the live perception chain
+
+Four terminals, or background them and use `./run.sh stop` to end them all.
+Each needs a source of `sensor_msgs/Image` — Isaac Sim, a recorded bag, or a
+real camera.
+
+```bash
+./run.sh detect         # images      -> vision_msgs/Detection2DArray
+./run.sh triangulate    # detections  -> PoseWithCovarianceStamped, world frame
+./run.sh error          # estimates   -> distance from /tf truth, per port
+./run.sh rviz           # raw + annotated streams side by side
+```
+
+Two things that will otherwise cost you an afternoon:
+
+- **`use_sim_time` must match whoever opened the scene.** It defaults to `true`,
+  correct when `./run.sh sample` is driving (it adds a `/clock` publisher at
+  runtime). A hand-opened Isaac Sim or a bag played without `--clock` publishes
+  no `/clock`, and then the node still detects but its timers never fire — no
+  status output and, worse, no warning when it stops receiving images. Pass
+  `-p use_sim_time:=false`.
+- **Nothing started in the background stops by itself.** The detector alone
+  holds ~1 GB of VRAM indefinitely. `./run.sh stop` ends them;
+  `./run.sh stop --dry-run` lists them first.
+
+### Regenerate the dataset (needs Isaac Sim + `scene.usd`)
+
+Two terminals — **the recorder must be running before the sampler starts**, or
+poses are accepted and silently produce no data.
+
+```bash
+# terminal 1
 ./run.sh recorder
 
 # terminal 2
-./run.sh sample --samples 20 --seed 0
+./run.sh sample --samples 1000 --headless     # ~2h; ~12 attempts per accepted pose
 ```
 
-Then turn a recorded bag into inspectable samples:
+Then, after stopping the recorder so rosbag2 writes its `metadata.yaml`:
 
 ```bash
-./run.sh extract                    # newest bag in rosbags/ -> rosbag_samples/
-./run.sh yolo --drop-inconsistent   # -> yolo_dataset/ (images + labels)
-./run.sh train pretrained=yolo26s.pt
+./run.sh extract                              # bag  -> rosbag_samples/
+./run.sh yolo --drop-inconsistent             #      -> yolo_dataset/
+./run.sh train pretrained=yolo26s.pt epochs=100
 ```
 
-And to run the trained detector against a live scene, one terminal each:
+`--drop-inconsistent` matters: without it, an image keeps its label for one port
+while a second, visible-but-unlabelable port is left as background.
 
-```bash
-./run.sh sample --samples 0         # scene only, no randomization
-./run.sh detect                     # images   -> detections
-./run.sh triangulate                # detections -> 3D poses + covariance
-./run.sh error                      # poses    -> distance from /tf truth
-./run.sh stop                       # none of these exit on their own
-```
+### Every command
 
-`./run.sh` with no arguments lists every step. **Read [CLAUDE.md](CLAUDE.md)
-before running anything** — it carries the version, interpreter and
-startup-order facts that are not guessable from the code, and the known sharp
-edges.
+| Step | Does |
+|---|---|
+| `build` | colcon build the ROS 2 workspace |
+| `recorder` | serve `/record_rosbag`, writing an mcap bag per trigger |
+| `sample` | randomise poses in Isaac Sim, trigger a recording per accepted one |
+| `extract` | bag → images, transforms and intrinsics on disk |
+| `bbox` | project the ports into one frame as 2D boxes (`--annotate` to draw) |
+| `yolo` | extracted frames → an Ultralytics dataset |
+| `train` | train a detector; defaults tuned for ~17 px objects |
+| `detect` | run the detector on live camera topics |
+| `triangulate` | multi-view detections → 3D pose with covariance |
+| `error` | score estimates against `/tf`, paired one-to-one |
+| `rviz` | open RViz with the project layout |
+| `contract` | regenerate `docs/scene_contract.yaml` from the scene |
+| `check` | tests + contract freshness — run before committing |
+| `stop` | stop everything this script starts |
+| `info`, `topics` | inspect a bag / list live topics |
+
+`./run.sh` with no arguments prints the same list with full help.
+
+---
 
 ## How it fits together
 
@@ -84,53 +260,36 @@ yolo_detector_node -> port_triangulator_node -> port_error_node
                                       live detection, triangulation, scoring
 ```
 
-Two documents cover this in depth:
-**[docs/pipeline.md](docs/pipeline.md)** walks the whole flow stage by stage —
-what each stage receives, the maths it applies, what it emits and how to check
-it. **[docs/components.md](docs/components.md)** is the per-component reference:
-what each script and node consumes, produces, and gets wrong if you hold it
-incorrectly.
+No bounding box is ever drawn by hand: labels are projected from the recorded
+transforms and the ports' known aperture size.
 
-The trigger goes through an OmniGraph node inside the USD stage rather than
-from Python because Isaac Sim's bundled Python 3.11 cannot host Jazzy's
-Python 3.12 `rclpy` — see CLAUDE.md.
+---
 
-## Layout
+## Documentation
 
-| Path | What |
+| | |
 |---|---|
-| `run.sh` | every pipeline step; handles sourcing and interpreter choice |
-| `CLAUDE.md` | versions, interpreters, startup order, known sharp edges |
-| `isaacsim/` | the USD scene (binary, gitignored) |
-| `scripts/randomize_visible_joints.py` | the pose sampler that drives the scene |
-| `ros_ws/src/bag_recorder_node/` | the `/record_rosbag` Trigger service |
-| `ros_ws/src/yolo_detector_node/` | runs the detector on live camera topics |
-| `ros_ws/src/port_triangulator_node/` | multi-view detections → 3D pose + covariance |
-| `ros_ws/src/port_error_node/` | estimates vs `/tf` truth, paired one-to-one |
-| `scripts/extract_rosbag_samples.py` | bag → labelled samples |
-| `scripts/project_port_bboxes.py` | transforms + intrinsics → 2D boxes |
-| `scripts/export_yolo_dataset.py` | samples → Ultralytics dataset |
-| `scripts/dump_scene_contract.py` | scene → `docs/scene_contract.yaml` |
-| `docs/components.md` | **what every script and node does** |
-| `docs/dataset.md`, `docs/training.md` | how the dataset and model were produced |
-| `docs/scene_contract.yaml` | **generated**: what the scene publishes, in readable form |
-| `tests/` | pytest for every pure function in the pipeline |
-| `rviz/dipl.rviz` | RViz layout for the three camera streams |
-| `rosbags/` | recorded bags (gitignored — large) |
-| `rosbag_samples/` | extracted samples (gitignored — a full run is ~324 MB) |
+| [CLAUDE.md](CLAUDE.md) | **read before running anything** — versions, interpreters, startup order, and every sharp edge found so far |
+| [docs/pipeline.md](docs/pipeline.md) | the whole flow stage by stage, with the maths |
+| [docs/components.md](docs/components.md) | what each script and node does |
+| [docs/dataset.md](docs/dataset.md) | how the dataset was built, and its caveats |
+| [docs/training.md](docs/training.md) | the training run and what its score means |
+| [docs/scene_contract.yaml](docs/scene_contract.yaml) | **generated** — what the scene publishes, in readable form |
+
+---
 
 ## Published topics
 
-From `docs/scene_contract.yaml`, which is regenerated from the scene itself:
+From the scene:
 
 | Topic | Type |
 |---|---|
-| `/center_camera/image`, `/left_camera/image`, `/right_camera/image` | `sensor_msgs/Image`, 1152×1024 `rgb8` |
-| `/center_camera/camera_info`, `/left_camera/camera_info`, `/right_camera/camera_info` | `sensor_msgs/CameraInfo`, fx=fy=997.66, cx=576, cy=512 |
-| `/tf` | `tf2_msgs/TFMessage` — arm links, the three `*_camera_optical` frames, and both `sfp_port_*_entrance` frames |
-| `/record_rosbag` | `std_srvs/Trigger` (service, provided by `bag_recorder_node`) |
+| `/{center,left,right}_camera/image` | `sensor_msgs/Image`, 1152×1024 `rgb8` |
+| `/{center,left,right}_camera/camera_info` | `sensor_msgs/CameraInfo`, fx=fy=997.66, cx=576, cy=512 |
+| `/tf` | `tf2_msgs/TFMessage` — arm links, camera optical frames, both port entrances |
+| `/record_rosbag` | `std_srvs/Trigger` (served by `bag_recorder_node`) |
 
-Added by the perception nodes when they are running:
+From the perception nodes:
 
 | Topic | Type |
 |---|---|
@@ -139,30 +298,42 @@ Added by the perception nodes when they are running:
 | `/port_triangulator_node/port_<n>/pose` | `geometry_msgs/PoseWithCovarianceStamped`, world frame |
 | `/port_error_node/port_<n>/error` | `std_msgs/Float64` — metres from the true pose |
 
-## Verifying a change
+RViz has no `Detection2DArray` display, so `rviz/dipl.rviz` shows the annotated
+image topics instead.
 
-```bash
-./run.sh check
-```
-
-Runs the tests and confirms `docs/scene_contract.yaml` still matches the scene.
-Everything else in the pipeline needs Isaac Sim or a GPU, so this is the only
-cheap check — keep new logic in pure functions so it stays that way.
+---
 
 ## Known limitations
 
-These are real and currently unfixed; CLAUDE.md has the detail.
+- **Port identity is positional, not semantic.** The triangulator's `port_0`
+  matches the true `sfp_port_0_entrance` about half the time. Telling them apart
+  needs a third landmark or temporal tracking.
+- **Detector recall is capped by the two side cameras**, which the sampler never
+  vets for occlusion: 0.997 on the centre camera, 0.888 and 0.843 on the sides.
+  A labelling artifact, not a model weakness.
+- **The fibre cable is switched off in the scene** (`/UR5e_gripper/cable` is
+  deactivated) and was for the whole pipeline, so no render contains one and the
+  occlusion test never rejected a pose it would have blocked.
+- **Covariance is deliberately pessimistic** — the default `pixel_sigma=1.5`
+  over-states uncertainty roughly 8x against measured error.
+- **Every number here comes from one room, one fixture and one renderer**, with
+  validation drawn from the same run as training. They say the geometry is right;
+  they say nothing about a real camera.
+- The scene references assets by absolute path into `~/IsaacLab`, three of which
+  are already dead. It is not portable between machines as-is.
 
-- A trigger fired before all seven topics have arrived is rejected cleanly but
-  still loses that sample, as does an image stamped newer than the newest `/tf`
-  (~1% of poses).
-- Port identity is positional, not semantic: the triangulator's `port_0` matches
-  the true `sfp_port_0_entrance` about half the time. Distinguishing them needs
-  a third landmark or temporal tracking.
-- The trained detector's recall is capped by the two side cameras, which the
-  sampler never vets for occlusion — 0.997 on the centre camera, 0.888 and
-  0.843 on the sides.
-- The scene references assets by absolute path into `~/IsaacLab`, three of
-  which are already dead. It is not portable to another machine as-is.
-- Bags hold one frame per accepted pose, not a continuous stream, so frame rate
-  is whatever the sampler triggered at.
+---
+
+## Licence
+
+This project uses [Ultralytics](https://github.com/ultralytics/ultralytics)
+YOLO26, which is licensed **AGPL-3.0**. `yolo_detector_node` imports it, and
+`runs/sfp_yolo26s_p2/weights/best.pt` was trained from Ultralytics' `yolo26s.pt`
+weights, so the trained model and its full configuration are distributed here
+with the source rather than held back.
+
+> **Relicensing to AGPL-3.0 is in progress.** Some package manifests still
+> declare Apache-2.0 and are being updated; treat AGPL-3.0 as the intended
+> licence for this work. The three files under
+> `ros_ws/src/bag_recorder_node/test/` are Copyright 2015 Open Source Robotics
+> Foundation and remain under their original Apache-2.0 terms.
