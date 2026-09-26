@@ -172,8 +172,12 @@ needs reversing to BGR, `step` is a row stride that can exceed
 `width × channels`, and the result must be copied because `predict()`
 letterboxes in place.
 
-QoS defaults to RELIABLE, matching the scene; a BEST_EFFORT subscriber would
-match nothing and sit silent.
+QoS defaults to RELIABLE, matching the scene. Note the direction: DDS matches
+on "offered >= requested", so a BEST_EFFORT subscriber receives from *any*
+publisher, while a RELIABLE subscriber receives nothing from a BEST_EFFORT one
+— only a warning on both sides. Since most real camera drivers publish sensor
+data best-effort, `-p best_effort:=true` is the flag that makes this node work
+against them.
 
 ## `port_triangulator_node` — detections to 3D
 `./run.sh triangulate [args]` · venv Python 3.12

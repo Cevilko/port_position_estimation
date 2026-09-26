@@ -377,12 +377,29 @@ detects, because callbacks use the message's own header stamp, but its clock
 never advances, so its timers never fire: no throughput reports and, worse, no
 "not receiving images" warning when something really is broken.
 
-**Default QoS is RELIABLE, matching the scene.** `bag_recorder_node` receives
-frames with a plain depth-1 reliable subscription, so the publisher is
-reliable; a `BEST_EFFORT` subscriber would match nothing and sit silent. Pass
-`-p best_effort:=true` for a camera that publishes best-effort. The node warns
-every 10 s while it has received no images, which is what that failure looks
-like from the outside.
+**Default QoS is RELIABLE, and RELIABLE is the *stricter* request — not the
+safer one.** DDS matches on "offered >= requested", with RELIABLE outranking
+BEST_EFFORT, so the four combinations behave like this (measured, not
+recalled):
+
+| publisher | subscriber | delivered |
+|---|---|---|
+| RELIABLE | BEST_EFFORT | yes |
+| RELIABLE | RELIABLE | yes |
+| BEST_EFFORT | BEST_EFFORT | yes |
+| **BEST_EFFORT** | **RELIABLE** | **no** |
+
+A BEST_EFFORT subscriber therefore matches *anything*; only a RELIABLE
+subscriber can fail, and only against a best-effort publisher. That is the
+pairing to watch for, because most real camera drivers publish sensor data
+BEST_EFFORT. RELIABLE is the default here because the scene's cameras publish
+RELIABLE and that pairing drops no frames.
+
+When it does mismatch, ROS 2 logs `incompatible QoS` at **warning** level on
+both sides and nothing reaches the callback — no error, no exception. Pass
+`-p best_effort:=true` for a best-effort camera. The node also warns every 10 s
+while it has received no images, which is what the failure looks like from the
+outside.
 
 ## Triangulating the ports in 3D
 

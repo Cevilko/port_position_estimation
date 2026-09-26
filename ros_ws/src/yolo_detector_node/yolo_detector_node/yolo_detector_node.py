@@ -117,10 +117,17 @@ class YoloDetectorNode(Node):
         self.declare_parameter("cameras", DEFAULT_CAMERAS)
         self.declare_parameter("image_suffix", "/image")
         self.declare_parameter("publish_annotated", True)
-        # The scene's cameras publish RELIABLE (bag_recorder_node subscribes
-        # that way and receives frames). A BEST_EFFORT subscriber would match
-        # nothing and sit silent, which is the classic "my node gets no
-        # images" failure, so reliable is the default here too.
+        # Reliability follows the DDS "offered >= requested" rule, where
+        # RELIABLE outranks BEST_EFFORT. So a BEST_EFFORT subscriber matches
+        # ANY publisher, while a RELIABLE one matches only a RELIABLE
+        # publisher -- RELIABLE is the stricter request, not the safer one.
+        # It is the default because the scene's cameras publish RELIABLE
+        # (bag_recorder_node subscribes that way and receives frames) and that
+        # pairing will not drop a frame. Against a best-effort publisher,
+        # which is what most real camera drivers use for sensor data, this
+        # subscriber matches nothing: ROS 2 logs an "incompatible QoS" warning
+        # on both sides and no callback ever fires. That is what
+        # best_effort:=true is for.
         self.declare_parameter("best_effort", False)
 
         self.imgsz = int(self.get_parameter("imgsz").value)
